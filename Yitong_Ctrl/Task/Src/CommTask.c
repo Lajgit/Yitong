@@ -35,6 +35,7 @@ static bool USART_ReceiveMesg_Verify(void *self, void *mesg)
 static void USART_Deal(void *Rx_mesg)
 {
     uint32_t data;
+    uint8_t brightness;
     Mesg_TypeDef *mesg = (Mesg_TypeDef *)Rx_mesg;
 
     if (mesg->Code1 != Board_to_Ctrl)
@@ -58,7 +59,11 @@ static void USART_Deal(void *Rx_mesg)
         break;
 
     case CTRL_CMD_BELT_BRIGHTNESS:
-        LightBelt_Lightness = mesg->Data4;
+        brightness = mesg->Data4;
+        /* 中文注释：协议亮度范围为0~10，异常大值钳位到10，避免越界亮度影响灯效计算。 */
+        if (brightness > 10U)
+            brightness = 10U;
+        LightBelt_Lightness = brightness;
         break;
 
     case CTRL_CMD_SCENE:
@@ -67,7 +72,11 @@ static void USART_Deal(void *Rx_mesg)
         break;
 
     case CTRL_CMD_BRIGHTNESS:
-        LightBoard_Lightness = mesg->Data4;
+        brightness = mesg->Data4;
+        /* 中文注释：协议亮度范围为0~10，异常大值钳位到10，避免越界亮度影响灯效计算。 */
+        if (brightness > 10U)
+            brightness = 10U;
+        LightBoard_Lightness = brightness;
         Light1.Init = true;
         Light2.Init = true;
         break;
