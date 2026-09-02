@@ -62,7 +62,8 @@ static void USART_Deal(void *Rx_mesg)
         break;
 
     case CTRL_CMD_SCENE:
-        Scene = (Scene_t)mesg->Data4;
+        /* 中文注释：主板→控台0x02/0x03灯光场景按协议使用补充位传递场景，Data4固定为0。 */
+        Scene = (Scene_t)mesg->ExpandCode;
         break;
 
     case CTRL_CMD_BRIGHTNESS:
