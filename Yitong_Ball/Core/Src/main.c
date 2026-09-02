@@ -26,8 +26,6 @@ int main(void)
 
   MX_GPIO_Init();
   MX_DMA_Init();
-  /* 中文注释：TIM2_CH1重映射到PA15驱动球盘呼吸灯。 */
-  MX_TIM2_Init();
   MX_TIM3_Init();
   /* 中文注释：球盘与主板固定使用USART2/PA2/PA3。 */
   MX_USART2_UART_Init();
