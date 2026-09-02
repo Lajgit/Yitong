@@ -66,21 +66,25 @@ void Rx_Receive(void *self, void *mesg, uint8_t mesg_len)
                 else
                     rx->State = WAIT_HEAD;
                 // 若接收到帧尾且帧长度符合条件，进行解包和处理，并重置状态以接收下一帧
-                if (rx->CurrData == rx->Frame_Tail && rx->Queue.Index >= mesg_len - 1)
+                // 协议固定帧长为14字节；异常长帧遇到帧尾时只复位丢弃，避免越界拷贝。
+                if (rx->CurrData == rx->Frame_Tail)
                 {
                     rx->State = WAIT_HEAD;
-                    memcpy(mesg, rx->Queue.Buf, rx->Queue.Index + 1);
-                    /// 解包并处理
-                    if (rx->Verify != NULL)
+                    if (rx->Queue.Index == mesg_len - 1)
                     {
-                        if (rx->Verify(rx, mesg) == true)
+                        memcpy(mesg, rx->Queue.Buf, mesg_len);
+                        /// 解包并处理
+                        if (rx->Verify != NULL)
+                        {
+                            if (rx->Verify(rx, mesg) == true)
+                                if (rx->Deal != NULL)
+                                    rx->Deal(mesg);
+                        }
+                        else
+                        {
                             if (rx->Deal != NULL)
                                 rx->Deal(mesg);
-                    }
-                    else
-                    {
-                        if (rx->Deal != NULL)
-                            rx->Deal(mesg);
+                        }
                     }
                 }
                 rx->Queue.Index++;
