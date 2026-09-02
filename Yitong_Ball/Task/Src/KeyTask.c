@@ -8,6 +8,7 @@
 /*
  * 中文注释：沿用旧模板KeyTask文件名以避免修改工程结构。
  * 实际任务改为扫描球盘7路光眼：PB3~PB7五路 + PA4/PA5的FB1/FB2两路。
+ * 协议表当前写编号1~6，但硬件实际保留7路：1~5为本板光眼，6~7为两块外接数码管模块反馈。
  */
 static GPIO_TypeDef *BallEye_Port[BALL_EYE_COUNT] = {
     BallEye1_GPIO_Port,

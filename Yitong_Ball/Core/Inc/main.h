@@ -18,8 +18,8 @@ extern "C" {
 void Error_Handler(void);
 
 /* 中文注释：球盘原理图User_Led实际接PA15，作为普通GPIO状态灯使用。 */
-#define LED_Pin GPIO_PIN_15
-#define LED_GPIO_Port GPIOA
+#define User_Led_Pin GPIO_PIN_15
+#define User_Led_GPIO_Port GPIOA
 
 /* 中文注释：球盘5颗WS2812串联，数据输入接PA7/TIM3_CH2。 */
 #define BallLight_Pin GPIO_PIN_7

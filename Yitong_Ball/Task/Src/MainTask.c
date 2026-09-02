@@ -24,7 +24,7 @@ static void SystemLight_Task(void)
     if ((uint32_t)(HAL_GetTick() - time) > SYSLIGHT_BLINK_TIME)
     {
         /* 中文注释：球盘User_Led实际接PA15，每500ms翻转一次GPIO。 */
-        HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
+        HAL_GPIO_TogglePin(User_Led_GPIO_Port, User_Led_Pin);
         time = HAL_GetTick();
     }
 }

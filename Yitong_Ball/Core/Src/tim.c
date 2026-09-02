@@ -9,20 +9,8 @@
 /* USER CODE END Header */
 #include "tim.h"
 
-TIM_HandleTypeDef htim1;
-TIM_HandleTypeDef htim2;
 TIM_HandleTypeDef htim3;
 DMA_HandleTypeDef hdma_tim3_ch2;
-
-void MX_TIM1_Init(void)
-{
-    /* 中文注释：球盘当前不使用TIM1，保留空入口兼容工程生成的头文件。 */
-}
-
-void MX_TIM2_Init(void)
-{
-    /* 中文注释：PA15状态灯已恢复为普通GPIO翻转，不再使用TIM2 PWM。 */
-}
 
 void MX_TIM3_Init(void)
 {
@@ -83,11 +71,6 @@ void HAL_TIM_Base_MspInit(TIM_HandleTypeDef* tim_baseHandle)
   }
 }
 
-void HAL_TIM_Encoder_MspInit(TIM_HandleTypeDef* tim_encoderHandle)
-{
-    (void)tim_encoderHandle;
-}
-
 void HAL_TIM_MspPostInit(TIM_HandleTypeDef* timHandle)
 {
   GPIO_InitTypeDef GPIO_InitStruct = {0};
@@ -109,9 +92,4 @@ void HAL_TIM_Base_MspDeInit(TIM_HandleTypeDef* tim_baseHandle)
     __HAL_RCC_TIM3_CLK_DISABLE();
     HAL_DMA_DeInit(tim_baseHandle->hdma[TIM_DMA_ID_CC2]);
   }
-}
-
-void HAL_TIM_Encoder_MspDeInit(TIM_HandleTypeDef* tim_encoderHandle)
-{
-    (void)tim_encoderHandle;
 }

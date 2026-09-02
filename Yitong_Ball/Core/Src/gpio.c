@@ -23,17 +23,18 @@ void MX_GPIO_Init(void)
   __HAL_AFIO_REMAP_SWJ_NOJTAG();
 
   /* 中文注释：User_Led由3.3V经电阻接到PA15，低电平点亮。 */
-  HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(User_Led_GPIO_Port, User_Led_Pin, GPIO_PIN_RESET);
+  /* 中文注释：SEG_OE经两级反相后与OE#同极性，PB12低电平使能显示，高电平关闭显示。 */
   HAL_GPIO_WritePin(Tube_OE_GPIO_Port, Tube_OE_Pin, GPIO_PIN_RESET);
   HAL_GPIO_WritePin(Tube_RCLK_GPIO_Port, Tube_RCLK_Pin, GPIO_PIN_SET);
   HAL_GPIO_WritePin(Tube_SRCLK_GPIO_Port, Tube_SRCLK_Pin, GPIO_PIN_SET);
   HAL_GPIO_WritePin(Tube_SER_GPIO_Port, Tube_SER_Pin, GPIO_PIN_RESET);
 
-  GPIO_InitStruct.Pin = LED_Pin;
+  GPIO_InitStruct.Pin = User_Led_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(LED_GPIO_Port, &GPIO_InitStruct);
+  HAL_GPIO_Init(User_Led_GPIO_Port, &GPIO_InitStruct);
 
   /* 中文注释：PB3~PB7和PA4/PA5均由原理图外围电阻提供电平，MCU不额外上下拉。 */
   GPIO_InitStruct.Pin = BallEye1_Pin | BallEye2_Pin | BallEye3_Pin | BallEye4_Pin | BallEye5_Pin;

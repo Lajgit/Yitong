@@ -8,8 +8,6 @@
 #define Event_SceneChange (1u << 4)
 #define Event_LeftHoleInside (1u << 5)
 #define Event_RightHoleInside (1u << 6)
-#define Event_USART1_IDLE (1u << 7)
-#define Event_USART3_IDLE (1u << 8)
 
 typedef enum
 {

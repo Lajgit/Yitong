@@ -89,6 +89,9 @@ static bool DigitalTube_SetNum(uint8_t positon, uint32_t data, uint8_t datasize,
             DigitalTube_Setbit(positon + datasize - i, num, buffer, buffersize, code);
         data /= 10;
     }
+
+    // 正常写入完成返回true，避免static bool函数返回值未定义。
+    return true;
 }
 
 /*
