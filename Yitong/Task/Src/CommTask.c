@@ -159,7 +159,8 @@ static void USART1_Deal(void *Rx_mesg)
             break;
 
         case r_SceneChange:
-            Comm_SendMesg_FillData(&Tx3, Board_to_Ctrl, CTRL_CMD_SCENE, data, mesg->ExpandCode);
+            /* 中文注释：协议表中主板→控台0x02/0x03灯光场景使用补充位传递场景，Data4固定为0。 */
+            Comm_SendMesg_FillData(&Tx3, Board_to_Ctrl, CTRL_CMD_SCENE, 0U, mesg->ExpandCode);
             break;
 
         case r_LightBeltMode:
