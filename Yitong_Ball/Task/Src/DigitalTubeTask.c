@@ -7,7 +7,7 @@
 #define BALL_LEFT_MODULE_OFFSET 0U
 #define BALL_RIGHT_MODULE_OFFSET 2U
 
-static uint8_t DigitalBuffer[BALL_DIGITAL_BUFFER_SIZE] = {0xFF, 0xFF, 0xFF, 0xFF};
+static uint8_t DigitalBuffer[BALL_DIGITAL_BUFFER_SIZE] = {0xC0, 0xC0, 0xC0, 0xC0};
 static SoftwareSPI_HandleTypeDef TubeSPI;
 DigitalTube_t DigitalTube;
 
@@ -41,7 +41,8 @@ void DigitalTubeTask_Init(void)
     Init.spi_transmit = DigitalTube_SPItransmit;
     DigitalTube_Init(&DigitalTube, Init);
 
-    memset(DigitalBuffer, 0xFF, sizeof(DigitalBuffer));
+    /* 中文注释：两块模块各使用16位SM16306，四个字节全部写入数字0段码，确保上电两块都显示0。 */
+    memset(DigitalBuffer, SEGMENT_CODE_CA[0], sizeof(DigitalBuffer));
     DigitalTube.Refresh(&DigitalTube);
 }
 
