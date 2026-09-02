@@ -6,8 +6,9 @@
 #define BALL_DIGITAL_BUFFER_SIZE 4U
 #define BALL_LEFT_MODULE_OFFSET 0U
 #define BALL_RIGHT_MODULE_OFFSET 2U
+#define BALL_DIGITAL_ZERO_CODE 0x82U
 
-static uint8_t DigitalBuffer[BALL_DIGITAL_BUFFER_SIZE] = {0xC0, 0xC0, 0xC0, 0xC0};
+static uint8_t DigitalBuffer[BALL_DIGITAL_BUFFER_SIZE] = {BALL_DIGITAL_ZERO_CODE, BALL_DIGITAL_ZERO_CODE, BALL_DIGITAL_ZERO_CODE, BALL_DIGITAL_ZERO_CODE};
 static SoftwareSPI_HandleTypeDef TubeSPI;
 DigitalTube_t DigitalTube;
 
@@ -37,12 +38,13 @@ void DigitalTubeTask_Init(void)
     Init.bit_num = sizeof(DigitalBuffer);
     Init.LE_GPIO = Tube_RCLK_GPIO_Port;
     Init.LE_Pin = Tube_RCLK_Pin;
-    Init.CODE_CA = SEGMENT_CODE_CA;
+    /* 中文注释：外接FJ8106BH模块接线为OUT0=F、OUT1=G、OUT2=E、OUT3=D、OUT4=C、OUT5=A、OUT6=B、OUT7=DP，需使用对应段码表。 */
+    Init.CODE_CA = DIGITAL3BIT_CODE_CA;
     Init.spi_transmit = DigitalTube_SPItransmit;
     DigitalTube_Init(&DigitalTube, Init);
 
-    /* 中文注释：两块模块各使用16位SM16306，四个字节全部写入数字0段码，确保上电两块都显示0。 */
-    memset(DigitalBuffer, SEGMENT_CODE_CA[0], sizeof(DigitalBuffer));
+    /* 中文注释：两块模块各使用16位SM16306，四个字节全部写入实际接线对应的数字0段码，确保上电两块都显示0。 */
+    memset(DigitalBuffer, DIGITAL3BIT_CODE_CA[0], sizeof(DigitalBuffer));
     DigitalTube.Refresh(&DigitalTube);
 }
 
@@ -61,7 +63,7 @@ void BallDigitalTube_Set(uint8_t side, uint8_t value)
     else
         return;
 
-    segment = SEGMENT_CODE_CA[value];
+    segment = DIGITAL3BIT_CODE_CA[value];
 
     /*
      * 中文注释：每块外接数码管模块使用一颗16位SM16306，但仅OUT0~OUT7接七段数码管。
