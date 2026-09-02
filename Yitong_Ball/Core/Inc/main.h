@@ -17,8 +17,9 @@ extern "C" {
 
 void Error_Handler(void);
 
-#define LED_Pin GPIO_PIN_13
-#define LED_GPIO_Port GPIOC
+/* 中文注释：球盘原理图User_Led实际接PA15，通过TIM2_CH1重映射输出呼吸灯PWM。 */
+#define LED_Pin GPIO_PIN_15
+#define LED_GPIO_Port GPIOA
 
 /* 中文注释：球盘5颗WS2812串联，数据输入接PA7/TIM3_CH2。 */
 #define BallLight_Pin GPIO_PIN_7

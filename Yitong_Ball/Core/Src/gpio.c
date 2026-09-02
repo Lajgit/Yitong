@@ -19,20 +19,15 @@ void MX_GPIO_Init(void)
   __HAL_RCC_GPIOB_CLK_ENABLE();
   __HAL_RCC_AFIO_CLK_ENABLE();
 
-  /* 中文注释：PB3/PB4作为球盘光眼输入，关闭JTAG并保留SWD。 */
+  /* 中文注释：PB3/PB4作为球盘光眼输入，PA15作为呼吸灯PWM，关闭JTAG并保留SWD。 */
   __HAL_AFIO_REMAP_SWJ_NOJTAG();
 
-  HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_RESET);
   HAL_GPIO_WritePin(Tube_OE_GPIO_Port, Tube_OE_Pin, GPIO_PIN_RESET);
   HAL_GPIO_WritePin(Tube_RCLK_GPIO_Port, Tube_RCLK_Pin, GPIO_PIN_SET);
   HAL_GPIO_WritePin(Tube_SRCLK_GPIO_Port, Tube_SRCLK_Pin, GPIO_PIN_SET);
   HAL_GPIO_WritePin(Tube_SER_GPIO_Port, Tube_SER_Pin, GPIO_PIN_RESET);
 
-  GPIO_InitStruct.Pin = LED_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(LED_GPIO_Port, &GPIO_InitStruct);
+  /* 中文注释：PA15呼吸灯由TIM2_CH1重映射为复用推挽输出，在tim.c中初始化。 */
 
   /* 中文注释：PB3~PB7和PA4/PA5均由原理图外围电阻提供电平，MCU不额外上下拉。 */
   GPIO_InitStruct.Pin = BallEye1_Pin | BallEye2_Pin | BallEye3_Pin | BallEye4_Pin | BallEye5_Pin;

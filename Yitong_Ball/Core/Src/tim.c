@@ -21,7 +21,43 @@ void MX_TIM1_Init(void)
 
 void MX_TIM2_Init(void)
 {
-    /* 中文注释：球盘当前不使用TIM2，保留空入口兼容工程生成的头文件。 */
+  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+  TIM_OC_InitTypeDef sConfigOC = {0};
+
+  /*
+   * 中文注释：TIM2_CH1通过部分重映射输出到PA15，驱动板上User_Led呼吸灯。
+   * APB1定时器时钟为72MHz，72MHz/(71+1)/(999+1)=1kHz PWM。
+   */
+  htim2.Instance = TIM2;
+  htim2.Init.Prescaler = 71;
+  htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim2.Init.Period = 999;
+  htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_ENABLE;
+  if (HAL_TIM_Base_Init(&htim2) != HAL_OK)
+    Error_Handler();
+
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim2, &sClockSourceConfig) != HAL_OK)
+    Error_Handler();
+  if (HAL_TIM_PWM_Init(&htim2) != HAL_OK)
+    Error_Handler();
+
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim2, &sMasterConfig) != HAL_OK)
+    Error_Handler();
+
+  sConfigOC.OCMode = TIM_OCMODE_PWM1;
+  sConfigOC.Pulse = 0;
+  /* 中文注释：原理图LED由3.3V经电阻接到PA15，PA15输出低时点亮，因此PWM使用低有效极性。 */
+  sConfigOC.OCPolarity = TIM_OCPOLARITY_LOW;
+  sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
+  if (HAL_TIM_PWM_ConfigChannel(&htim2, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)
+    Error_Handler();
+
+  HAL_TIM_MspPostInit(&htim2);
 }
 
 void MX_TIM3_Init(void)
@@ -63,7 +99,11 @@ void MX_TIM3_Init(void)
 
 void HAL_TIM_Base_MspInit(TIM_HandleTypeDef* tim_baseHandle)
 {
-  if(tim_baseHandle->Instance==TIM3)
+  if(tim_baseHandle->Instance==TIM2)
+  {
+    __HAL_RCC_TIM2_CLK_ENABLE();
+  }
+  else if(tim_baseHandle->Instance==TIM3)
   {
     __HAL_RCC_TIM3_CLK_ENABLE();
 
@@ -92,7 +132,21 @@ void HAL_TIM_MspPostInit(TIM_HandleTypeDef* timHandle)
 {
   GPIO_InitTypeDef GPIO_InitStruct = {0};
 
-  if(timHandle->Instance==TIM3)
+  if(timHandle->Instance==TIM2)
+  {
+    __HAL_RCC_GPIOA_CLK_ENABLE();
+    __HAL_RCC_AFIO_CLK_ENABLE();
+
+    /* 中文注释：释放JTAG占用的PA15并将TIM2_CH1部分重映射到PA15，SWD仍保留。 */
+    __HAL_AFIO_REMAP_SWJ_NOJTAG();
+    __HAL_AFIO_REMAP_TIM2_PARTIAL_1();
+
+    GPIO_InitStruct.Pin = LED_Pin;
+    GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
+    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
+    HAL_GPIO_Init(LED_GPIO_Port, &GPIO_InitStruct);
+  }
+  else if(timHandle->Instance==TIM3)
   {
     __HAL_RCC_GPIOA_CLK_ENABLE();
     GPIO_InitStruct.Pin = BallLight_Pin;
@@ -104,7 +158,12 @@ void HAL_TIM_MspPostInit(TIM_HandleTypeDef* timHandle)
 
 void HAL_TIM_Base_MspDeInit(TIM_HandleTypeDef* tim_baseHandle)
 {
-  if(tim_baseHandle->Instance==TIM3)
+  if(tim_baseHandle->Instance==TIM2)
+  {
+    __HAL_RCC_TIM2_CLK_DISABLE();
+    HAL_GPIO_DeInit(LED_GPIO_Port, LED_Pin);
+  }
+  else if(tim_baseHandle->Instance==TIM3)
   {
     __HAL_RCC_TIM3_CLK_DISABLE();
     HAL_DMA_DeInit(tim_baseHandle->hdma[TIM_DMA_ID_CC2]);
