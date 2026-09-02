@@ -17,7 +17,7 @@ extern "C" {
 
 void Error_Handler(void);
 
-/* 中文注释：球盘原理图User_Led实际接PA15，通过TIM2_CH1重映射输出呼吸灯PWM。 */
+/* 中文注释：球盘原理图User_Led实际接PA15，作为普通GPIO状态灯使用。 */
 #define LED_Pin GPIO_PIN_15
 #define LED_GPIO_Port GPIOA
 
