@@ -4,7 +4,6 @@
 #include "KeyTask.h"
 #include "MainTask.h"
 #include "FlashTask.h"
-#include "DigitalTubeTask.h"
 #include "app_crc.h"
 #include "app_list.h"
 #include "string.h"
@@ -16,6 +15,8 @@
 static void USART_RequestMesg(Tx_HandleTypeDef *Tx, Mesg_TypeDef *mesg);
 static bool Board_WriteBootRequest(uint32_t request_magic);
 static void Board_SystemRestart(bool enter_bootloader);
+static bool USART_ReceiveMesg_Verify(void *self, void *mesg);
+static uint32_t Mesg_GetData32(const Mesg_TypeDef *mesg);
 
 ListHandle_t ResendList, DealList;
 static ListNode_t ResendList_buffer[100];
@@ -23,18 +24,33 @@ static ListNode_t DealList_buffer[100];
 
 static Mesg_TypeDef MesgTable[256];
 static uint8_t rx1_buffer[512];
+static uint8_t rx2_buffer[256];
+static uint8_t rx3_buffer[256];
 static Mesg_TypeDef Receive1_mesg;
+static Mesg_TypeDef Receive2_mesg;
+static Mesg_TypeDef Receive3_mesg;
 
 Tx_HandleTypeDef Tx1;
+Tx_HandleTypeDef Tx2;
+Tx_HandleTypeDef Tx3;
 Rx_HandleTypeDef Rx1;
+Rx_HandleTypeDef Rx2;
+Rx_HandleTypeDef Rx3;
 
 extern Event_Handle_t Mesg_event;
 extern Motor_Card Card;
 extern Motor_Hoolle Motor_Hoolle1;
 extern Motor_Hoolle Motor_Hoolle2;
-extern servo_t Servo1;
 extern Switch_Valve Lock_Valve;
 extern ListHandle_t ResendList, DealList;
+
+static uint32_t Mesg_GetData32(const Mesg_TypeDef *mesg)
+{
+    return ((uint32_t)mesg->Data1 << 24) |
+           ((uint32_t)mesg->Data2 << 16) |
+           ((uint32_t)mesg->Data3 << 8) |
+           (uint32_t)mesg->Data4;
+}
 
 static bool Board_WriteBootRequest(uint32_t request_magic)
 {
@@ -44,7 +60,6 @@ static bool Board_WriteBootRequest(uint32_t request_magic)
     __HAL_RCC_PWR_CLK_ENABLE();
     __DSB();
     (void)RCC->APB1ENR;
-
     HAL_PWR_EnableBkUpAccess();
 
     timeout = 100000U;
@@ -82,211 +97,287 @@ static void Board_SystemRestart(bool enter_bootloader)
     if (!Board_WriteBootRequest(request_magic))
         return;
 
-    /* 中文注释：复位前强制退出0x21手动常转模式并立即停止吐珠电机。 */
+    /* 中文注释：复位前停止本板所有可能持续动作的执行器。 */
     SteelBall_MotorSwitch(MOTOR_SWITCH_OFF);
     Motor_Hoolle2.Motor.state = DEVICE_STATE_STOP;
     Card.Switch.state = DEVICE_STATE_STOP;
+    Servo_SetRun(0U);
 
-    /*
-     * USART_RequestMesg()已经在命令处理前完成应答，
-     * 延时后再复位，给安卓端留出接收应答的时间。
-     */
     HAL_Delay(100U);
     NVIC_SystemReset();
 }
 
-/// 串口1消息验证
-static bool USART1_ReceiveMesg_Verify(void *self, void *mesg)
+static bool USART_ReceiveMesg_Verify(void *self, void *mesg)
 {
     Rx_HandleTypeDef *rx = (Rx_HandleTypeDef *)self;
     Mesg_TypeDef *Rx_mesg = (Mesg_TypeDef *)mesg;
-    uint16_t crc16, mesg_crc16;
-    crc16 = CRC16_calculate(rx->Queue.Buf, 11);
-    mesg_crc16 = Rx_mesg->CRC16_H << 8 | Rx_mesg->CRC16_L;
-    if (crc16 == mesg_crc16)
-        return true;
-    return false;
+    uint16_t crc16 = CRC16_calculate(rx->Queue.Buf, 11);
+    uint16_t mesg_crc16 = ((uint16_t)Rx_mesg->CRC16_H << 8) | Rx_mesg->CRC16_L;
+    return crc16 == mesg_crc16;
 }
 
-/// 串口1消息处理
+/* 中文注释：处理安卓→主板命令，并按协议把控台/球盘命令路由到对应串口。 */
 static void USART1_Deal(void *Rx_mesg)
 {
     uint32_t data;
     Mesg_TypeDef *mesg = (Mesg_TypeDef *)Rx_mesg;
+
     if (mesg->Code1 == Android_to_Board)
     {
-        USART_RequestMesg(&Tx1, mesg);
-        if (List_IsExistID(&DealList, mesg->ID) == false)
+        if (mesg->ACKbyte != 0U)
+            USART_RequestMesg(&Tx1, mesg);
+
+        if (List_IsExistID(&DealList, mesg->ID) != false)
+            return;
+
+        data = Mesg_GetData32(mesg);
+
+        switch (mesg->Code2)
         {
-            switch (mesg->Code2)
-            {
-            /// 版本请求
-            case r_GetVersion:
-                EventGroupSetBits(&Mesg_event, MesgEvent_VersionRequest);
-                break;
+        case r_GetVersion:
+            /* 中文注释：安卓0x00请求的是球盘版本，转发给球盘0x04/0x00。 */
+            Comm_SendMesg_FillData(&Tx2, Board_to_Ball, BALL_CMD_VERSION, 0U, 0U);
+            break;
 
-            /// 出钢珠/扭蛋
-            case r_HoolleOutput:
-                data = ((mesg->Data3 << 8) | mesg->Data4);
-                /* 中文注释：正式协议固定0x00=扭蛋，0x01=钢珠；其他值不执行。 */
-                if (mesg->ExpandCode == HOOLLE_TYPE_EGG)
-                    Hoolle_Output(&Motor_Hoolle2, data);
-                else if (mesg->ExpandCode == HOOLLE_TYPE_STEEL_BALL)
-                    Hoolle_Output(&Motor_Hoolle1, data);
-                break;
+        case r_HoolleOutput:
+            if (mesg->ExpandCode == HOOLLE_TYPE_NORMAL)
+                Hoolle_Output(&Motor_Hoolle2, (uint16_t)data);
+            else if (mesg->ExpandCode == HOOLLE_TYPE_STEEL_BALL)
+                Hoolle_Output(&Motor_Hoolle1, (uint16_t)data);
+            break;
 
-            /// 出卡
-            case r_CardOutput:
-                data = ((mesg->Data3 << 8) | mesg->Data4);
-                Card_Output(&Card, data);
-                break;
+        case r_CardOutput:
+            Card_Output(&Card, (uint16_t)data);
+            break;
 
-            /// 清钢珠/清扭蛋
-            case r_OutputAllHoolle:
-                if (mesg->ExpandCode == HOOLLE_TYPE_EGG)
-                {
-                    Motor_Hoolle2.ClearMode = 1;
-                    Hoolle_Output(&Motor_Hoolle2, 0xFFFF - Motor_Hoolle2.Hoolle_num);
-                }
-                else if (mesg->ExpandCode == HOOLLE_TYPE_STEEL_BALL)
-                {
-                    Motor_Hoolle1.ClearMode = 1;
-                    Hoolle_Output(&Motor_Hoolle1, 0xFFFF - Motor_Hoolle1.Hoolle_num);
-                }
-                break;
+        case r_CtrlDigitalTube:
+            Comm_SendMesg_FillData(&Tx3, Board_to_Ctrl, CTRL_CMD_DIGITAL_TUBE, data, 0U);
+            break;
 
-            /// 继续扭蛋和卡片剩余输出
-            case r_OutputRemainingItem:
-                Hoolle_Output(&Motor_Hoolle2, 0);
-                Card_Output(&Card, 0);
-                break;
+        case r_BallDigitalTube:
+            Comm_SendMesg_FillData(&Tx2, Board_to_Ball, BALL_CMD_DIGITAL_TUBE, data, 0U);
+            break;
 
-            /// 恢复默认设置
-            case r_ResumeDefultSetting:
-                ResumeSetting();
-                break;
+        case r_SceneChange:
+            Comm_SendMesg_FillData(&Tx3, Board_to_Ctrl, CTRL_CMD_SCENE, data, mesg->ExpandCode);
+            break;
 
-            /// 保存设置
-            case r_SaveSetting:
-                EventGroupSetBits(&Mesg_event, Event_FlashData);
-                break;
+        case r_LightBeltMode:
+            /* 中文注释：现行主板→控台/球盘协议没有灯带模式功能码，不擅自复用其他命令。 */
+            break;
 
-            /// 开锁
-            case r_Unlock:
-                Lock_Valve.Switch.state = DEVICE_STATE_START;
-                EventGroupSetBits(&Mesg_event, MesgEvent_Unlock);
-                break;
+        case r_WinChannel:
+            /* 中文注释：分板协议未定义中奖通道下发目标，保持不处理。 */
+            break;
 
-            /// 舵机1归零
-            case r_ServoReset:
-                Servo1.SetAngle(&Servo1, 90);
-                break;
+        case r_OutputAllHoolle:
+            /*
+             * 中文注释：协议0x0B补充位固定0x00，对应瓷珠通道；
+             * 不同时清钢珠，避免改变原协议中0x00瓷珠/0x01钢珠的类型语义。
+             */
+            Motor_Hoolle2.ClearMode = 1U;
+            Hoolle_Output(&Motor_Hoolle2, (uint16_t)(0xFFFFU - Motor_Hoolle2.Hoolle_num));
+            break;
 
-            /// 吐珠/钢珠电机手动开关
-            case r_SteelBallMotorSwitch:
-                /*
-                 * 中文注释：0x21使用ExpandCode控制手动常转。
-                 * 0x00立即关闭，0x01开启后持续运行，不受数量和超时状态机影响。
-                 */
-                if (mesg->ExpandCode == MOTOR_SWITCH_OFF)
-                    SteelBall_MotorSwitch(MOTOR_SWITCH_OFF);
-                else if (mesg->ExpandCode == MOTOR_SWITCH_ON)
-                    SteelBall_MotorSwitch(MOTOR_SWITCH_ON);
-                break;
+        case r_OutputRemainingItem:
+            /* 中文注释：协议“吐出剩余物品”沿用原逻辑，仅继续瓷珠和卡片。 */
+            Hoolle_Output(&Motor_Hoolle2, 0U);
+            Card_Output(&Card, 0U);
+            break;
 
-            /// 停止所有设备
-            case r_StopAllDevice:
-                /* 中文注释：0xFF必须同时退出0x21手动常转模式，防止下一轮CtrlTask重新启动。 */
+        case r_ResumeDefultSetting:
+            ResumeSetting();
+            break;
+
+        case r_SaveSetting:
+            EventGroupSetBits(&Mesg_event, Event_FlashData);
+            break;
+
+        case r_Unlock:
+            Lock_Valve.Switch.state = DEVICE_STATE_START;
+            EventGroupSetBits(&Mesg_event, MesgEvent_Unlock);
+            break;
+
+        case r_ServoControl:
+            Servo_SetRun(mesg->ExpandCode == 0x01U ? 1U : 0U);
+            break;
+
+        case r_LightControl:
+            /* 中文注释：安卓0x15与主板→球盘0x02字段一致，原样转发。 */
+            Comm_SendMesg_FillData(&Tx2, Board_to_Ball, BALL_CMD_RGB_MODE, data, mesg->ExpandCode);
+            break;
+
+        case r_CtrlButtonLight:
+            /* 中文注释：现行主板→控台协议没有按键灯功能码，暂不创造私有命令。 */
+            break;
+
+        case r_ServoReset:
+            Servo_SetRun(0U);
+            break;
+
+        case r_SteelBallMotorSwitch:
+            /* 中文注释：保留既有0x21调试功能，不改变正式协议中的其他功能码。 */
+            if (mesg->ExpandCode == MOTOR_SWITCH_OFF)
                 SteelBall_MotorSwitch(MOTOR_SWITCH_OFF);
-                Motor_Hoolle2.Motor.state = DEVICE_STATE_STOP;
-                Card.Switch.state = DEVICE_STATE_STOP;
-                break;
+            else if (mesg->ExpandCode == MOTOR_SWITCH_ON)
+                SteelBall_MotorSwitch(MOTOR_SWITCH_ON);
+            break;
 
-            /// 系统复位/进入Bootloader
-            case r_SystemReset:
-                data = (uint32_t)mesg->Data1 << 24 |
-                       (uint32_t)mesg->Data2 << 16 |
-                       (uint32_t)mesg->Data3 << 8 |
-                       (uint32_t)mesg->Data4;
-                Board_SystemRestart(data == OTA_REQUEST_MAGIC);
-                break;
+        case r_StopAllDevice:
+            SteelBall_MotorSwitch(MOTOR_SWITCH_OFF);
+            Motor_Hoolle2.Motor.state = DEVICE_STATE_STOP;
+            Card.Switch.state = DEVICE_STATE_STOP;
+            Servo_SetRun(0U);
+            break;
 
-            /// 数码管显示
-            case r_DigitalTubeData:
-                data = (uint32_t)mesg->Data1 << 24 |
-                       (uint32_t)mesg->Data2 << 16 |
-                       (uint32_t)mesg->Data3 << 8 |
-                       (uint32_t)mesg->Data4;
-                /* 中文注释：当前没有独立控台，四位数码管由主板SPI2直接刷新。 */
-                DigitalTube.Set_Num(&DigitalTube, 0, data, 4);
-                DigitalTube.Refresh(&DigitalTube);
-                break;
-            }
+        case r_SystemReset:
+            Board_SystemRestart(data == OTA_REQUEST_MAGIC);
+            break;
 
-            /// 将该消息包加入已处理列表，防止短时间内重复处理同样ID的消息包
-            List_AddNode(&DealList, mesg->ID, HAL_GetTick());
+        default:
+            break;
         }
+
+        List_AddNode(&DealList, mesg->ID, HAL_GetTick());
     }
-    /// 收到的是应答
     else if (mesg->Code1 == Board_to_Android)
     {
-        /// 重发列表中去除该消息包
         List_DeleteNode(&ResendList, mesg->ID);
     }
 }
 
-/// 发送消息，无重传
+/* 中文注释：处理球盘→主板0x05，并转换为安卓协议0x00/0x0E。 */
+static void USART2_Deal(void *Rx_mesg)
+{
+    Mesg_TypeDef *mesg = (Mesg_TypeDef *)Rx_mesg;
+
+    if (mesg->Code1 != Ball_to_Board)
+        return;
+
+    switch (mesg->Code2)
+    {
+    case BALL_REPORT_VERSION:
+        Comm_SendMesg_FillData_withResend(
+            &Tx1,
+            Board_to_Android,
+            t_VersionRequest,
+            Mesg_GetData32(mesg),
+            0U,
+            &ResendList);
+        break;
+
+    case BALL_REPORT_EYE:
+        if (mesg->Data4 >= 1U && mesg->Data4 <= 5U)
+        {
+            Comm_SendMesg_FillData_withResend(
+                &Tx1,
+                Board_to_Android,
+                t_LightEye,
+                (uint32_t)mesg->Data4,
+                0x00U,
+                &ResendList);
+        }
+        else if (mesg->Data4 == 6U || mesg->Data4 == 7U)
+        {
+            /*
+             * 中文注释：协议表球盘光眼写1~6，但当前原理图实际是PB3~PB7五路+FB1/FB2两路，共7路。
+             * ID6/7映射为安卓黄色两组的编号1/2，ExpandCode=0x01。
+             */
+            Comm_SendMesg_FillData_withResend(
+                &Tx1,
+                Board_to_Android,
+                t_LightEye,
+                (uint32_t)(mesg->Data4 - 5U),
+                0x01U,
+                &ResendList);
+        }
+        break;
+
+    default:
+        break;
+    }
+}
+
+/* 中文注释：处理控台→主板0x03，并转换为安卓按键/编码器协议。 */
+static void USART3_Deal(void *Rx_mesg)
+{
+    Mesg_TypeDef *mesg = (Mesg_TypeDef *)Rx_mesg;
+
+    if (mesg->Code1 != Ctrl_to_Board)
+        return;
+
+    switch (mesg->Code2)
+    {
+    case CTRL_REPORT_VERSION:
+        /* 中文注释：安卓协议没有独立控台版本上报功能码，仅接收不转发。 */
+        break;
+
+    case CTRL_REPORT_BUTTON:
+        Comm_SendMesg_FillData(&Tx1, Board_to_Android, t_Button, (uint32_t)mesg->Data4, mesg->ExpandCode);
+        break;
+
+    case CTRL_REPORT_SPECIAL_BUTTON:
+        Comm_SendMesg_FillData(&Tx1, Board_to_Android, t_SpecialButton, (uint32_t)mesg->Data4, mesg->ExpandCode);
+        break;
+
+    case CTRL_REPORT_ENCODER:
+        if (mesg->ExpandCode <= 0x01U)
+        {
+            Comm_SendMesg_FillData(&Tx1, Board_to_Android, t_Encoder, 0U, mesg->ExpandCode);
+        }
+        /* 中文注释：控台定义0x02=编码器按下，但安卓0x0F仅定义左/右，因此按下暂不转发。 */
+        break;
+
+    default:
+        break;
+    }
+}
+
 static uint8_t USART_SendMesg(Tx_HandleTypeDef *Tx, Mesg_TypeDef *mesg)
 {
     static uint8_t ID = 0;
     uint8_t data[14];
     uint16_t crc;
 
-    ID++;                  // 每次发送新消息都会自增
-    mesg->ResendID = 0;    // 重发次数清零
-    mesg->ID = ID;         // 赋予新ID号
-    MesgTable[ID] = *mesg; // 保存消息包
+    ID++;
+    mesg->ResendID = 0;
+    mesg->ID = ID;
+    MesgTable[ID] = *mesg;
     memcpy(data, mesg, 14);
     crc = CRC16_calculate(data, 11);
-    data[11] = crc >> 8;
-    data[12] = crc;
+    data[11] = (uint8_t)(crc >> 8);
+    data[12] = (uint8_t)crc;
     HAL_UART_Transmit(Tx->huart, data, 14, 100);
     return ID;
 }
 
-/// 填入参数发送消息，无重传
 uint8_t Comm_SendMesg_FillData(Tx_HandleTypeDef *Tx, uint8_t code_1, uint8_t code_2, uint32_t data, uint8_t expandCode)
 {
     Mesg_TypeDef mesg = {0};
     mesg.Head = Mesg_Head;
-    mesg.ResendID = 0;
-    mesg.ID = 0;
     mesg.Code1 = code_1;
     mesg.Code2 = code_2;
     mesg.Data1 = (uint8_t)(data >> 24);
     mesg.Data2 = (uint8_t)(data >> 16);
     mesg.Data3 = (uint8_t)(data >> 8);
-    mesg.Data4 = (uint8_t)(data);
+    mesg.Data4 = (uint8_t)data;
     mesg.ACKbyte = 0x00;
     mesg.ExpandCode = expandCode;
     mesg.Tail = Mesg_Tail;
     return USART_SendMesg(Tx, &mesg);
 }
 
-/// 填充数据发送消息并加入重发列表
 uint8_t Comm_SendMesg_FillData_withResend(Tx_HandleTypeDef *Tx, uint8_t code_1, uint8_t code_2, uint32_t data, uint8_t expandCode, ListHandle_t *List)
 {
     uint8_t ID;
     Mesg_TypeDef mesg = {0};
     mesg.Head = Mesg_Head;
-    mesg.ResendID = 0;
-    mesg.ID = 0;
     mesg.Code1 = code_1;
     mesg.Code2 = code_2;
     mesg.Data1 = (uint8_t)(data >> 24);
     mesg.Data2 = (uint8_t)(data >> 16);
     mesg.Data3 = (uint8_t)(data >> 8);
-    mesg.Data4 = (uint8_t)(data);
+    mesg.Data4 = (uint8_t)data;
     mesg.ACKbyte = 0x01;
     mesg.ExpandCode = expandCode;
     mesg.Tail = Mesg_Tail;
@@ -295,69 +386,50 @@ uint8_t Comm_SendMesg_FillData_withResend(Tx_HandleTypeDef *Tx, uint8_t code_1, 
     return ID;
 }
 
-/// 发送重发消息
 static uint8_t USART_ReSendMesg(Tx_HandleTypeDef *Tx, Mesg_TypeDef *mesg)
 {
     uint8_t data[14];
     uint16_t crc;
+
     mesg->ResendID++;
     if (mesg->ResendID > Max_Resend_Times)
         return 1;
+
+    memcpy(data, mesg, 14);
     data[0] = Mesg_Head;
     data[1] = mesg->ResendID;
-    data[2] = mesg->ID;
-    data[3] = mesg->Code1;
-    data[4] = mesg->Code2;
-    data[5] = mesg->Data1;
-    data[6] = mesg->Data2;
-    data[7] = mesg->Data3;
-    data[8] = mesg->Data4;
-    data[9] = mesg->ACKbyte;
-    data[10] = mesg->ExpandCode;
     crc = CRC16_calculate(data, 11);
-    data[11] = crc >> 8;
-    data[12] = crc;
+    data[11] = (uint8_t)(crc >> 8);
+    data[12] = (uint8_t)crc;
     data[13] = Mesg_Tail;
     HAL_UART_Transmit(Tx->huart, data, 14, 100);
     return 0;
 }
 
-/// 发送应答消息
 static void USART_RequestMesg(Tx_HandleTypeDef *Tx, Mesg_TypeDef *mesg)
 {
     uint8_t data[14];
     uint16_t crc;
-    data[0] = Mesg_Head;
-    data[1] = mesg->ResendID;
-    data[2] = mesg->ID;
-    data[3] = mesg->Code1;
-    data[4] = mesg->Code2;
-    data[5] = mesg->Data1;
-    data[6] = mesg->Data2;
-    data[7] = mesg->Data3;
-    data[8] = mesg->Data4;
-    data[9] = mesg->ACKbyte;
-    data[10] = mesg->ExpandCode;
+
+    memcpy(data, mesg, 14);
     crc = CRC16_calculate(data, 11);
-    data[11] = crc >> 8;
-    data[12] = crc;
+    data[11] = (uint8_t)(crc >> 8);
+    data[12] = (uint8_t)crc;
     data[13] = Mesg_Tail;
     HAL_UART_Transmit(Tx->huart, data, 14, 100);
 }
 
-/* ----------检测重发消息---------- */
 void Resend_Task(void)
 {
     ListNode_t *Current = ResendList.Head;
     uint32_t CurrentTime = HAL_GetTick();
+
     for (uint8_t i = 0; i < ResendList.NodeCount; i++)
     {
-        // 超时时间内未收到应答，立即重发
         if (CurrentTime - Current->Value > ResendTrigger_Time)
         {
             USART_ReSendMesg(&Tx1, &(MesgTable[Current->ID]));
             Current->Value = CurrentTime;
-            // 如果重发次数达到最大次数，则从重发列表中删除
             if (MesgTable[Current->ID].ResendID >= Max_Resend_Times)
                 List_DeleteNode(&ResendList, Current->ID);
         }
@@ -365,47 +437,67 @@ void Resend_Task(void)
     }
 }
 
-/* ----------清除已执行消息任务---------- */
 void MesgDeal_Task(void)
 {
     ListNode_t *Current = DealList.Head;
     uint32_t CurrentTime = HAL_GetTick();
+
     for (uint8_t i = 0; i < DealList.NodeCount; i++)
     {
-        // 达到超时时间则从列表中删除，表示可接收同样ID的新消息
         if (CurrentTime - Current->Value > MesgDeal_Time)
             List_DeleteNode(&DealList, Current->ID);
         Current = Current->Next;
     }
 }
 
-/* ----------通信初始化---------- */
 void CommInit(void)
 {
+    Rx_InitTypeDef Rxinit;
+    Tx_InitTypeDef Tx_init;
+
     List_Create(&ResendList, ResendList_buffer, 100);
     List_Create(&DealList, DealList_buffer, 100);
 
-    /* 中文注释：当前无独立控台，正式通信只初始化主板与安卓之间的USART1。 */
-    Rx_InitTypeDef Rxinit;
+    /* 中文注释：USART1=安卓，USART2=球盘，USART3=控台。 */
+    Rxinit.Frame_Head = Mesg_Head;
+    Rxinit.Frame_Tail = Mesg_Tail;
+    Rxinit.Mesg_Len = 14U;
+    Rxinit.Receive = Rx_Receive;
+    Rxinit.Verify = USART_ReceiveMesg_Verify;
+
     Rxinit.huart = &huart1;
     Rxinit.RingBuf = rx1_buffer;
     Rxinit.RingBuf_Size = sizeof(rx1_buffer);
-    Rxinit.Frame_Head = Mesg_Head;
-    Rxinit.Frame_Tail = Mesg_Tail;
-    Rxinit.Receive = Rx_Receive;
-    Rxinit.Verify = USART1_ReceiveMesg_Verify;
     Rxinit.Deal = USART1_Deal;
     Communicate_Rx_Init(&Rx1, Rxinit);
 
-    Tx_InitTypeDef Tx_init;
-    Tx_init.huart = &huart1;
+    Rxinit.huart = &huart2;
+    Rxinit.RingBuf = rx2_buffer;
+    Rxinit.RingBuf_Size = sizeof(rx2_buffer);
+    Rxinit.Deal = USART2_Deal;
+    Communicate_Rx_Init(&Rx2, Rxinit);
+
+    Rxinit.huart = &huart3;
+    Rxinit.RingBuf = rx3_buffer;
+    Rxinit.RingBuf_Size = sizeof(rx3_buffer);
+    Rxinit.Deal = USART3_Deal;
+    Communicate_Rx_Init(&Rx3, Rxinit);
+
     Tx_init.hdma = NULL;
     Tx_init.TxBuf = NULL;
     Tx_init.TxBuf_Size = 0;
+
+    Tx_init.huart = &huart1;
     Communicate_Tx_Init(&Tx1, Tx_init);
+    Tx_init.huart = &huart2;
+    Communicate_Tx_Init(&Tx2, Tx_init);
+    Tx_init.huart = &huart3;
+    Communicate_Tx_Init(&Tx3, Tx_init);
 }
 
 void CommTask(void)
 {
     Rx1.Receive(&Rx1, &Receive1_mesg, 14);
+    Rx2.Receive(&Rx2, &Receive2_mesg, 14);
+    Rx3.Receive(&Rx3, &Receive3_mesg, 14);
 }

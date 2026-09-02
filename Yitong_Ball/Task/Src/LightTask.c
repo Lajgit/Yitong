@@ -1,98 +1,114 @@
 #include "LightTask.h"
-#include "MainTask.h"
-#include "FlashTask.h"
-#include "app_list.h"
-#include "CommTask.h"
 #include "tim.h"
-#include "stdlib.h"
+
+#define BALL_LED_COUNT 5U
+#define BALL_COLOR_COUNT 9U
+#define BALL_MODE_ON 0x00U
+#define BALL_MODE_OFF 0x01U
+#define BALL_MODE_BLINK 0x02U
+#define BALL_MODE_BREATH 0x03U
 
 static RGB_t Light1_RGBbuffer[Light1_RGBbuffer_SIZE];
 static uint8_t Light1_CRRbuffer[Light1_CRRbuffer_SIZE];
-static RGB_t Light2_RGBbuffer[Light2_RGBbuffer_SIZE];
-static uint8_t Light2_CRRbuffer[Light2_CRRbuffer_SIZE];
+static uint8_t BallLedColor[BALL_LED_COUNT] = {0U};
+static uint8_t BallLedMode[BALL_LED_COUNT] = {BALL_MODE_OFF, BALL_MODE_OFF, BALL_MODE_OFF, BALL_MODE_OFF, BALL_MODE_OFF};
+static uint8_t BallLightness = 5U;
+static uint8_t BallLightDirty = 1U;
 
-uint8_t LightBelt_Lightness = 5;
-uint8_t LightBoard_Lightness = 5;
-Semaphore_t Light1_Semaphore, Light2_Semaphore = {1};
-Light_t Light1, Light2;
-BreathLight_t J1, J2;
-BreathLight_t *BreathList[] = {&J1, &J2};
-
-extern Tx_HandleTypeDef Tx1;
-extern Scene_t Scene;
+Semaphore_t Light1_Semaphore = {1U};
+Light_t Light1;
 
 void Light_Init(void)
 {
-    RGB_Init(&Light1, &htim3, TIM_CHANNEL_1, Light1_RGBbuffer_SIZE, Light1_RGBbuffer, Light1_CRRbuffer, &Light1_Semaphore, RGB);
-    RGB_Init(&Light2, &htim3, TIM_CHANNEL_4, Light2_RGBbuffer_SIZE, Light2_RGBbuffer, Light2_CRRbuffer, &Light2_Semaphore, RGB);
-    BreathLight_Init(&J1, &htim1, TIM_CHANNEL_1, GPIOA, GPIO_PIN_8);
-    BreathLight_Init(&J2, &htim1, TIM_CHANNEL_2, GPIOA, GPIO_PIN_9);
+    /* 中文注释：球盘5颗WS2812连接PA7/TIM3_CH2。 */
+    RGB_Init(&Light1,
+             &htim3,
+             TIM_CHANNEL_2,
+             Light1_RGBbuffer_SIZE,
+             Light1_RGBbuffer,
+             Light1_CRRbuffer,
+             &Light1_Semaphore,
+             RGB);
     RegisterLight(ColorLight, &Light1);
-    RegisterLight(ColorLight, &Light2);
-    RegisterLight(BreathLight, &J1);
-    RegisterLight(BreathLight, &J2);
-
-    LightEffect_Unblock_SetColor(&Light1, 0, Light1.LED_NUM, SKYBLUE, LightBoard_Lightness, 255, false);
-    LightEffect_Unblock_SetColor(&Light2, 0, Light2.LED_NUM, SKYBLUE, LightBoard_Lightness, 255, false);
+    BallLightDirty = 1U;
 }
 
-static void LesslightSceneLight(void)
+void BallLight_SetMode(uint8_t led_id, uint8_t color_id, uint8_t mode)
 {
-    static uint8_t i, j, dir = 0;
-    static uint32_t time;
-    if (HAL_GetTick() - time > 10)
-    {
-        RGB_SetMoreColor(&Light1, 0, 17, Color_table[j], 0, 0);
-        RGB_SetMoreColor(&Light1, 18, Light1.LED_NUM, Color_table[j], LightBoard_Lightness, i);
-        RGB_SetAllColor(&Light2, Color_table[j], LightBoard_Lightness, i);
-        RGB_Flush(&Light1);
-        RGB_Flush(&Light2);
-        time = HAL_GetTick();
-        if (dir == 0)
-            i++;
-        else
-            i--;
-    }
-    if (i >= 255)
-        dir = 1;
-    else if (i <= 0)
-    {
-        dir = 0;
-        j++;
-        if (j >= 9)
-            j = 0;
-    }
+    if (led_id < 1U || led_id > BALL_LED_COUNT)
+        return;
+    if (color_id >= BALL_COLOR_COUNT)
+        return;
+    if (mode > BALL_MODE_BREATH)
+        return;
 
-    // LightEffect_Unblock_Breath_ChangeColor(&Light1, 18, Light1.LED_NUM, Color_table, 9, LightBoard_Lightness, 5, 1000);
-    // LightEffect_Unblock_Breath_ChangeColor(&Light2, 0, Light2.LED_NUM, Color_table, 9, LightBoard_Lightness, 5, 1000);
-    for (uint8_t i = 0; i < 2; i++)
-        BreathLight_SetLightKeep(BreathList[i], 0, LightBelt_Lightness, 255);
+    /* 中文注释：协议灯珠编号从1开始，内部数组从0开始。 */
+    BallLedColor[led_id - 1U] = color_id;
+    BallLedMode[led_id - 1U] = mode;
+    BallLightDirty = 1U;
 }
 
-static void IdleSceneLight(void)
+void BallLight_SetBrightness(uint8_t brightness)
 {
-    LightEffect_Unblock_Breath_ChangeColor(&Light1, 0, Light1.LED_NUM, Color_table, 9, LightBoard_Lightness, 5, 1000);
-    LightEffect_Unblock_Breath_ChangeColor(&Light2, 0, Light2.LED_NUM, Color_table, 9, LightBoard_Lightness, 5, 1000);
-    for (uint8_t i = 0; i < 2; i++)
-        BreathLight_SetLightKeep(BreathList[i], 0, LightBelt_Lightness, 255);
+    if (brightness > 10U)
+        brightness = 10U;
+
+    BallLightness = brightness;
+    BallLightDirty = 1U;
 }
 
-static void PlayingSceneLight(void)
+static uint8_t BallLight_GetRelativeLightness(uint8_t mode, uint32_t tick)
 {
-}
+    uint32_t phase;
 
-static void VictorySceneLight(void)
-{
+    if (mode == BALL_MODE_OFF)
+        return 0U;
+    if (mode == BALL_MODE_ON)
+        return 255U;
+    if (mode == BALL_MODE_BLINK)
+        return ((tick / 500U) & 0x01U) != 0U ? 255U : 0U;
+
+    /* 中文注释：呼吸模式使用2秒三角波，不阻塞主循环。 */
+    phase = tick % 2000U;
+    if (phase < 1000U)
+        return (uint8_t)((phase * 255U) / 1000U);
+
+    return (uint8_t)(((2000U - phase) * 255U) / 1000U);
 }
 
 void Light_Task(void)
 {
-    if (Scene == SCENE_LESSLIGHT)
-        LesslightSceneLight();
-    else if (Scene == SCENE_IDLE)
-        IdleSceneLight();
-    else if (Scene == SCENE_PLAYING)
-        PlayingSceneLight();
-    else if (Scene == SCENE_VICTORY)
-        VictorySceneLight();
+    static uint32_t LastRefreshTick = 0U;
+    uint32_t CurrentTick = HAL_GetTick();
+    uint8_t DynamicMode = 0U;
+
+    for (uint8_t i = 0U; i < BALL_LED_COUNT; i++)
+    {
+        if (BallLedMode[i] == BALL_MODE_BLINK || BallLedMode[i] == BALL_MODE_BREATH)
+        {
+            DynamicMode = 1U;
+            break;
+        }
+    }
+
+    if (BallLightDirty == 0U && DynamicMode == 0U)
+        return;
+    if (BallLightDirty == 0U && (uint32_t)(CurrentTick - LastRefreshTick) < 20U)
+        return;
+    if (SemaphoreTake(&Light1_Semaphore) == false)
+        return;
+
+    for (uint8_t i = 0U; i < BALL_LED_COUNT; i++)
+    {
+        uint8_t relative = BallLight_GetRelativeLightness(BallLedMode[i], CurrentTick);
+        RGB_SetOneColor(&Light1,
+                        i,
+                        Color_table[BallLedColor[i]],
+                        BallLightness,
+                        relative);
+    }
+
+    RGB_Flush(&Light1);
+    BallLightDirty = 0U;
+    LastRefreshTick = CurrentTick;
 }

@@ -9,9 +9,9 @@
 #include "DigitalTubeTask.h"
 #include "iwdg.h"
 
-#define SYSLIGHT_BLINK_TIME 500
+#define SYSLIGHT_BLINK_TIME 500U
 
-/* 兼容旧工程中仍参与编译但已退出运行路径的灯效模块，第二阶段删除对应工程项后再移除。 */
+/* 兼容旧工程中仍参与编译但已退出运行路径的灯效模块。 */
 Scene_t Scene = IdleScene;
 Event_Handle_t Event;
 
@@ -23,7 +23,7 @@ void System_Reset(void)
 
 static void SystemLight_Task(void)
 {
-    static uint32_t time = 0;
+    static uint32_t time = 0U;
     if (HAL_GetTick() - time > SYSLIGHT_BLINK_TIME)
     {
         HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
@@ -34,15 +34,14 @@ static void SystemLight_Task(void)
 void Main_Init(void)
 {
     FlashTask_Init();
+    /* 中文注释：CommInit同时初始化USART1安卓、USART2球盘、USART3控台三条协议链路。 */
     CommInit();
     Device_Init();
     HoolleInput_FilterInit();
     KeyAll_Init();
 
-    /* 中文注释：当前没有独立控台，四位数码管由主板SPI2直接驱动。 */
+    /* 中文注释：保留主板原理图现有本地数码管接口，不参与安卓0x04/0x05的分板转发。 */
     DigitalTubeTask_Init();
-
-    /* 中文注释：游玩按键和后台设置按键均直接接主板GPIO，不再向旧控台发送初始化命令。 */
 }
 
 void Main_Task(void)
@@ -53,13 +52,10 @@ void Main_Task(void)
     HAL_IWDG_Refresh(&hiwdg);
     Key_Task();
     HAL_IWDG_Refresh(&hiwdg);
-    /* 中文注释：旧弹界本地灯效任务已从主循环移除。 */
     CtrlTask();
     HAL_IWDG_Refresh(&hiwdg);
     Mesg_Task();
     HAL_IWDG_Refresh(&hiwdg);
-
-    /* 中文注释：数码管为主板直连模块，保持本地刷新任务。 */
     DigitalTube_Task();
     SystemLight_Task();
 }

@@ -1,94 +1,72 @@
 #include "KeyTask.h"
-#include "MesgTask.h"
-#include "MainTask.h"
 #include "CommTask.h"
-#include "LightTask.h"
-#include "port_key.h"
-#include "port_event.h"
+#include "main.h"
 
-static GPIO_TypeDef *Button_GPIO[2] = {Button1_GPIO_Port, Encoder_K_GPIO_Port};
-static uint16_t Button_Pin[2] = {Button1_Pin, Encoder_K_Pin};
+#define BALL_EYE_COUNT 7U
+#define BALL_EYE_SCAN_MS 3U
 
-static GPIO_TypeDef *Keyboard_GPIO[4] = {KeyBoard1_GPIO_Port, KeyBoard2_GPIO_Port, KeyBoard3_GPIO_Port, KeyBoard4_GPIO_Port};
-static uint16_t Keyboard_Pin[4] = {KeyBoard1_Pin, KeyBoard2_Pin, KeyBoard3_Pin, KeyBoard4_Pin};
+/*
+ * 中文注释：沿用旧模板KeyTask文件名以避免修改工程结构。
+ * 实际任务改为扫描球盘7路光眼：PB3~PB7五路 + PA4/PA5的FB1/FB2两路。
+ */
+static GPIO_TypeDef *BallEye_Port[BALL_EYE_COUNT] = {
+    BallEye1_GPIO_Port,
+    BallEye2_GPIO_Port,
+    BallEye3_GPIO_Port,
+    BallEye4_GPIO_Port,
+    BallEye5_GPIO_Port,
+    BallEyeFB1_GPIO_Port,
+    BallEyeFB2_GPIO_Port,
+};
 
-static Key_HandleTypeDef Button_Key[7];
-static Key_HandleTypeDef *Button_List[7];
+static uint16_t BallEye_Pin[BALL_EYE_COUNT] = {
+    BallEye1_Pin,
+    BallEye2_Pin,
+    BallEye3_Pin,
+    BallEye4_Pin,
+    BallEye5_Pin,
+    BallEyeFB1_Pin,
+    BallEyeFB2_Pin,
+};
 
-static Key_HandleTypeDef Keyboard_Key[4];
-static Key_HandleTypeDef *Keyboard_List[4];
-
-extern Event_Handle_t Mesg_event;
-extern Event_Handle_t Event;
-
+static GPIO_PinState BallEye_LastState[BALL_EYE_COUNT];
 extern Tx_HandleTypeDef Tx;
 
-/// ----------按键初始化----------
-static void Button_ShortCallback(uint16_t id)
-{
-    Comm_SendMesg_FillData(&Tx, Ctrl_to_Board, 0x01, id + 1, 0x01);
-}
-
-static void Button_LongCallback(uint16_t id)
-{
-    Comm_SendMesg_FillData(&Tx, Ctrl_to_Board, 0x01, id + 1, 0x02);
-}
-
-static void Button_Init(void)
-{
-    Key_InitTypeDef Key_InitStruct;
-    Key_InitStruct.debounce_time = KEY_DEBOUNCE_TIME;
-    Key_InitStruct.longpress_time = 800;
-    Key_InitStruct.trigger_frequnecy = KEY_LONG_TRIGGER_FREQUENCY;
-    Key_InitStruct.short_callback = Button_ShortCallback;
-    Key_InitStruct.long_callback = Button_LongCallback;
-    Key_InitStruct.release_callback = NULL;
-    Key_InitStruct.trigger_level = GPIO_PIN_RESET;
-
-    for (uint8_t i = 0; i < 2; i++)
-    {
-        Key_InitStruct.key_id = i;
-        Key_InitStruct.port = Button_GPIO[i];
-        Key_InitStruct.pin = Button_Pin[i];
-        Key_Init(&Button_Key[i], Key_InitStruct);
-        Button_List[i] = &Button_Key[i];
-    }
-}
-/// ----------键盘初始化----------
-
-static void Keyboard_ShortCallback(uint16_t id)
-{
-    Comm_SendMesg_FillData(&Tx, Ctrl_to_Board, 0x02, id + 1, 0x01);
-}
-
-static void Keyboard_Init(void)
-{
-    Key_InitTypeDef Key_InitStruct;
-    Key_InitStruct.debounce_time = KEY_DEBOUNCE_TIME;
-    Key_InitStruct.longpress_time = 1000;
-    Key_InitStruct.trigger_frequnecy = 1;
-    Key_InitStruct.short_callback = Keyboard_ShortCallback;
-    Key_InitStruct.long_callback = NULL;
-    Key_InitStruct.release_callback = NULL;
-    Key_InitStruct.trigger_level = GPIO_PIN_RESET;
-
-    for (uint8_t i = 0; i < 4; i++)
-    {
-        Key_InitStruct.key_id = i;
-        Key_InitStruct.port = Keyboard_GPIO[i];
-        Key_InitStruct.pin = Keyboard_Pin[i];
-        Key_Init(&Keyboard_Key[i], Key_InitStruct);
-        Keyboard_List[i] = &Keyboard_Key[i];
-    }
-}
 void KeyAll_Init(void)
 {
-    Button_Init();
-    Keyboard_Init();
+    for (uint8_t i = 0U; i < BALL_EYE_COUNT; i++)
+        BallEye_LastState[i] = HAL_GPIO_ReadPin(BallEye_Port[i], BallEye_Pin[i]);
 }
 
 void Key_Task(void)
 {
-    Key_Scan(Button_List, 1);
-    Key_Scan(Keyboard_List, 4);
+    static uint32_t LastScanTick = 0U;
+    uint32_t CurrentTick = HAL_GetTick();
+
+    if ((uint32_t)(CurrentTick - LastScanTick) < BALL_EYE_SCAN_MS)
+        return;
+
+    LastScanTick = CurrentTick;
+
+    for (uint8_t i = 0U; i < BALL_EYE_COUNT; i++)
+    {
+        GPIO_PinState CurrentState = HAL_GPIO_ReadPin(BallEye_Port[i], BallEye_Pin[i]);
+
+        /*
+         * 中文注释：当前光眼电路为光敏三极管集电极上拉。
+         * 正常收到红外时三极管导通，GPIO为低；钢珠遮挡后GPIO变高。
+         * 因此仅在低→高边沿上报一次，避免钢珠停留遮挡时重复发送。
+         */
+        if (BallEye_LastState[i] == GPIO_PIN_RESET && CurrentState == GPIO_PIN_SET)
+        {
+            Comm_SendMesg_FillData(
+                &Tx,
+                Ball_to_Board,
+                BALL_REPORT_EYE,
+                (uint32_t)(i + 1U),
+                BALL_EYE_TRIGGER);
+        }
+
+        BallEye_LastState[i] = CurrentState;
+    }
 }

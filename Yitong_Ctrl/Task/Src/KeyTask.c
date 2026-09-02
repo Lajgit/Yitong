@@ -1,94 +1,102 @@
 #include "KeyTask.h"
-#include "MesgTask.h"
-#include "MainTask.h"
 #include "CommTask.h"
-#include "LightTask.h"
 #include "port_key.h"
-#include "port_event.h"
 
-static GPIO_TypeDef *Button_GPIO[2] = {Button1_GPIO_Port, Encoder_K_GPIO_Port};
-static uint16_t Button_Pin[2] = {Button1_Pin, Encoder_K_Pin};
+#define PLAYER_BUTTON_COUNT 5U
 
-static GPIO_TypeDef *Keyboard_GPIO[4] = {KeyBoard1_GPIO_Port, KeyBoard2_GPIO_Port, KeyBoard3_GPIO_Port, KeyBoard4_GPIO_Port};
-static uint16_t Keyboard_Pin[4] = {KeyBoard1_Pin, KeyBoard2_Pin, KeyBoard3_Pin, KeyBoard4_Pin};
+/* 中文注释：玩家按键1~5按原理图依次为PB3~PB7。 */
+static GPIO_TypeDef *PlayerButton_Port[PLAYER_BUTTON_COUNT] = {
+    PlayerButton1_GPIO_Port,
+    PlayerButton2_GPIO_Port,
+    PlayerButton3_GPIO_Port,
+    PlayerButton4_GPIO_Port,
+    PlayerButton5_GPIO_Port,
+};
 
-static Key_HandleTypeDef Button_Key[7];
-static Key_HandleTypeDef *Button_List[7];
+static uint16_t PlayerButton_Pin[PLAYER_BUTTON_COUNT] = {
+    PlayerButton1_Pin,
+    PlayerButton2_Pin,
+    PlayerButton3_Pin,
+    PlayerButton4_Pin,
+    PlayerButton5_Pin,
+};
 
-static Key_HandleTypeDef Keyboard_Key[4];
-static Key_HandleTypeDef *Keyboard_List[4];
-
-extern Event_Handle_t Mesg_event;
-extern Event_Handle_t Event;
+static Key_HandleTypeDef PlayerButton_Key[PLAYER_BUTTON_COUNT];
+static Key_HandleTypeDef *PlayerButton_List[PLAYER_BUTTON_COUNT];
+static GPIO_PinState EncoderButton_LastState = GPIO_PIN_SET;
+static uint32_t EncoderButton_LastTick = 0U;
 
 extern Tx_HandleTypeDef Tx;
 
-/// ----------按键初始化----------
-static void Button_ShortCallback(uint16_t id)
+static void PlayerButton_ShortCallback(uint16_t id)
 {
-    Comm_SendMesg_FillData(&Tx, Ctrl_to_Board, 0x01, id + 1, 0x01);
+    Comm_SendMesg_FillData(&Tx, Ctrl_to_Board, CTRL_REPORT_BUTTON, id + 1U, KEY_EVENT_SHORT);
 }
 
-static void Button_LongCallback(uint16_t id)
+static void PlayerButton_LongCallback(uint16_t id)
 {
-    Comm_SendMesg_FillData(&Tx, Ctrl_to_Board, 0x01, id + 1, 0x02);
+    Comm_SendMesg_FillData(&Tx, Ctrl_to_Board, CTRL_REPORT_BUTTON, id + 1U, KEY_EVENT_LONG);
 }
 
-static void Button_Init(void)
+static void PlayerButton_ReleaseCallback(uint16_t id)
 {
-    Key_InitTypeDef Key_InitStruct;
-    Key_InitStruct.debounce_time = KEY_DEBOUNCE_TIME;
-    Key_InitStruct.longpress_time = 800;
-    Key_InitStruct.trigger_frequnecy = KEY_LONG_TRIGGER_FREQUENCY;
-    Key_InitStruct.short_callback = Button_ShortCallback;
-    Key_InitStruct.long_callback = Button_LongCallback;
-    Key_InitStruct.release_callback = NULL;
-    Key_InitStruct.trigger_level = GPIO_PIN_RESET;
+    Comm_SendMesg_FillData(&Tx, Ctrl_to_Board, CTRL_REPORT_BUTTON, id + 1U, KEY_EVENT_RELEASE);
+}
 
-    for (uint8_t i = 0; i < 2; i++)
+static void PlayerButton_Init(void)
+{
+    Key_InitTypeDef init;
+
+    for (uint16_t i = 0; i < PLAYER_BUTTON_COUNT; i++)
     {
-        Key_InitStruct.key_id = i;
-        Key_InitStruct.port = Button_GPIO[i];
-        Key_InitStruct.pin = Button_Pin[i];
-        Key_Init(&Button_Key[i], Key_InitStruct);
-        Button_List[i] = &Button_Key[i];
+        init.debounce_time = KEY_DEBOUNCE_TIME;
+        init.longpress_time = KEY_LONG_PRESS_TIME;
+        init.trigger_frequnecy = KEY_LONG_TRIGGER_FREQUENCY;
+        init.short_callback = PlayerButton_ShortCallback;
+        init.long_callback = PlayerButton_LongCallback;
+        init.release_callback = PlayerButton_ReleaseCallback;
+        init.trigger_level = GPIO_PIN_RESET;
+        init.key_id = i;
+        init.port = PlayerButton_Port[i];
+        init.pin = PlayerButton_Pin[i];
+        Key_Init(&PlayerButton_Key[i], init);
+        PlayerButton_List[i] = &PlayerButton_Key[i];
     }
 }
-/// ----------键盘初始化----------
 
-static void Keyboard_ShortCallback(uint16_t id)
+static void EncoderButton_Task(void)
 {
-    Comm_SendMesg_FillData(&Tx, Ctrl_to_Board, 0x02, id + 1, 0x01);
-}
+    GPIO_PinState CurrentState = HAL_GPIO_ReadPin(Encoder_K_GPIO_Port, Encoder_K_Pin);
+    uint32_t CurrentTick = HAL_GetTick();
 
-static void Keyboard_Init(void)
-{
-    Key_InitTypeDef Key_InitStruct;
-    Key_InitStruct.debounce_time = KEY_DEBOUNCE_TIME;
-    Key_InitStruct.longpress_time = 1000;
-    Key_InitStruct.trigger_frequnecy = 1;
-    Key_InitStruct.short_callback = Keyboard_ShortCallback;
-    Key_InitStruct.long_callback = NULL;
-    Key_InitStruct.release_callback = NULL;
-    Key_InitStruct.trigger_level = GPIO_PIN_RESET;
-
-    for (uint8_t i = 0; i < 4; i++)
+    /*
+     * 中文注释：PA15编码器按键由板上10k上拉，按下为低。
+     * 协议定义的是“按下”事件，因此在稳定的高→低边沿立即上报0x03/0x03、ExpandCode=0x02，
+     * 不沿用普通Key_Scan在松开后才触发短按回调的行为。
+     */
+    if (EncoderButton_LastState == GPIO_PIN_SET &&
+        CurrentState == GPIO_PIN_RESET &&
+        (uint32_t)(CurrentTick - EncoderButton_LastTick) >= KEY_DEBOUNCE_TIME)
     {
-        Key_InitStruct.key_id = i;
-        Key_InitStruct.port = Keyboard_GPIO[i];
-        Key_InitStruct.pin = Keyboard_Pin[i];
-        Key_Init(&Keyboard_Key[i], Key_InitStruct);
-        Keyboard_List[i] = &Keyboard_Key[i];
+        EncoderButton_LastTick = CurrentTick;
+        Comm_SendMesg_FillData(&Tx, Ctrl_to_Board, CTRL_REPORT_ENCODER, 0U, ENCODER_PRESS);
     }
+
+    if (CurrentState != EncoderButton_LastState)
+        EncoderButton_LastTick = CurrentTick;
+
+    EncoderButton_LastState = CurrentState;
 }
+
 void KeyAll_Init(void)
 {
-    Button_Init();
-    Keyboard_Init();
+    PlayerButton_Init();
+    EncoderButton_LastState = HAL_GPIO_ReadPin(Encoder_K_GPIO_Port, Encoder_K_Pin);
+    EncoderButton_LastTick = HAL_GetTick();
 }
 
 void Key_Task(void)
 {
-    Key_Scan(Button_List, 1);
-    Key_Scan(Keyboard_List, 4);
+    Key_Scan(PlayerButton_List, PLAYER_BUTTON_COUNT);
+    EncoderButton_Task();
 }

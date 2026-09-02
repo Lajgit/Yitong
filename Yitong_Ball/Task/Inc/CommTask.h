@@ -3,21 +3,23 @@
 
 #include "stdint.h"
 #include "port_communicate.h"
-#include "app_list.h"
-/// 版本号
-#define VERSION 20260430
-/// 消息类型
-#define Board_to_Android 0x00 // 主板->安卓
-#define Android_to_Board 0x01 // 安卓->主板
-#define Board_to_Ctrl 0x02    // 主板->控台
-#define Ctrl_to_Board 0x03    // 控台->主板
 
-#define ResendTrigger_Time 1000 // 重新发送触发时间ms
-#define MesgDeal_Time 250       // 消息处理时间
-#define Max_Resend_Times 3      // 最大重新发送次数
+#define VERSION 20260430U
 
+/* 中文注释：球盘只与主板通信。 */
+#define Board_to_Ball 0x04U
+#define Ball_to_Board 0x05U
 
-/// 接收消息结构体(新球盘)
+#define BALL_CMD_VERSION 0x00U
+#define BALL_CMD_DIGITAL_TUBE 0x01U
+#define BALL_CMD_RGB_MODE 0x02U
+#define BALL_CMD_BRIGHTNESS 0x04U
+
+#define BALL_REPORT_VERSION 0x00U
+#define BALL_REPORT_EYE 0x01U
+
+#define BALL_EYE_TRIGGER 0x01U
+
 typedef struct
 {
     uint8_t Head;
@@ -36,13 +38,7 @@ typedef struct
     uint8_t Tail;
 } Mesg_TypeDef;
 
-///
 uint8_t Comm_SendMesg_FillData(Tx_HandleTypeDef *Tx, uint8_t code_1, uint8_t code_2, uint32_t data, uint8_t expandCode);
-uint8_t Comm_SendMesg_FillData_withResend(Tx_HandleTypeDef *Tx, uint8_t code_1, uint8_t code_2, uint32_t data, uint8_t expandCode, ListHandle_t *List);
-
-void Resend_Task(void);
-void MesgDeal_Task(void);
-///
 void CommInit(void);
 void CommTask(void);
 

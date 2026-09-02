@@ -4,20 +4,35 @@
 #include "stdint.h"
 #include "port_communicate.h"
 #include "app_list.h"
+
 /// 版本号
-#define VERSION 20260430
-/// 消息类型
-#define Board_to_Android 0x00 // 主板->安卓
-#define Android_to_Board 0x01 // 安卓->主板
-#define Board_to_Ctrl 0x02    // 主板->控台
-#define Ctrl_to_Board 0x03    // 控台->主板
+#define VERSION 20260430U
 
-#define ResendTrigger_Time 1000 // 重新发送触发时间ms
-#define MesgDeal_Time 250       // 消息处理时间
-#define Max_Resend_Times 3      // 最大重新发送次数
+/* 中文注释：控台只保留与主板之间的两种通信方向。 */
+#define Board_to_Ctrl 0x02U
+#define Ctrl_to_Board 0x03U
 
+/// 主板→控台功能码2
+#define CTRL_CMD_VERSION 0x00U
+#define CTRL_CMD_DIGITAL_TUBE 0x01U
+#define CTRL_CMD_BELT_BRIGHTNESS 0x02U
+#define CTRL_CMD_SCENE 0x03U
+#define CTRL_CMD_BRIGHTNESS 0x04U
 
-/// 接收消息结构体(新球盘)
+/// 控台→主板功能码2
+#define CTRL_REPORT_VERSION 0x00U
+#define CTRL_REPORT_BUTTON 0x01U
+#define CTRL_REPORT_SPECIAL_BUTTON 0x02U
+#define CTRL_REPORT_ENCODER 0x03U
+
+#define KEY_EVENT_SHORT 0x01U
+#define KEY_EVENT_LONG 0x02U
+#define KEY_EVENT_RELEASE 0x03U
+#define ENCODER_LEFT 0x00U
+#define ENCODER_RIGHT 0x01U
+#define ENCODER_PRESS 0x02U
+
+/// 接收消息结构体
 typedef struct
 {
     uint8_t Head;
@@ -36,13 +51,7 @@ typedef struct
     uint8_t Tail;
 } Mesg_TypeDef;
 
-///
 uint8_t Comm_SendMesg_FillData(Tx_HandleTypeDef *Tx, uint8_t code_1, uint8_t code_2, uint32_t data, uint8_t expandCode);
-uint8_t Comm_SendMesg_FillData_withResend(Tx_HandleTypeDef *Tx, uint8_t code_1, uint8_t code_2, uint32_t data, uint8_t expandCode, ListHandle_t *List);
-
-void Resend_Task(void);
-void MesgDeal_Task(void);
-///
 void CommInit(void);
 void CommTask(void);
 

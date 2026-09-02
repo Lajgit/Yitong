@@ -5,87 +5,50 @@
   * @brief   This file provides code for the configuration
   *          of all used GPIO pins.
   ******************************************************************************
-  * @attention
-  *
-  * Copyright (c) 2026 STMicroelectronics.
-  * All rights reserved.
-  *
-  * This software is licensed under terms that can be found in the LICENSE file
-  * in the root directory of this software component.
-  * If no LICENSE file comes with this software, it is provided AS-IS.
-  *
-  ******************************************************************************
   */
 /* USER CODE END Header */
 
-/* Includes ------------------------------------------------------------------*/
 #include "gpio.h"
 
-/* USER CODE BEGIN 0 */
-
-/* USER CODE END 0 */
-
-/*----------------------------------------------------------------------------*/
-/* Configure GPIO                                                             */
-/*----------------------------------------------------------------------------*/
-/* USER CODE BEGIN 1 */
-
-/* USER CODE END 1 */
-
-/** Configure pins as
-        * Analog
-        * Input
-        * Output
-        * EVENT_OUT
-        * EXTI
-*/
 void MX_GPIO_Init(void)
 {
-
   GPIO_InitTypeDef GPIO_InitStruct = {0};
 
-  /* GPIO Ports Clock Enable */
   __HAL_RCC_GPIOC_CLK_ENABLE();
   __HAL_RCC_GPIOD_CLK_ENABLE();
   __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
+  __HAL_RCC_AFIO_CLK_ENABLE();
 
-  /*Configure GPIO pin Output Level */
+  /* 中文注释：PB3/PB4用于玩家按键，关闭JTAG并保留SWD下载调试。 */
+  __HAL_AFIO_REMAP_SWJ_NOJTAG();
+
   HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_RESET);
 
-  /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOB, SPI2_OE_Pin|SPI2_LE_Pin, GPIO_PIN_RESET);
+  /* 中文注释：PB12为数码管OE，PB14为RCLK锁存；PB13/PB15由SPI2初始化为复用输出。 */
+  HAL_GPIO_WritePin(GPIOB, SPI2_OE_Pin | SPI2_LE_Pin, GPIO_PIN_RESET);
 
-  /*Configure GPIO pin : LED_Pin */
   GPIO_InitStruct.Pin = LED_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(LED_GPIO_Port, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : SPI2_OE_Pin SPI2_LE_Pin */
-  GPIO_InitStruct.Pin = SPI2_OE_Pin|SPI2_LE_Pin;
+  GPIO_InitStruct.Pin = SPI2_OE_Pin | SPI2_LE_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : Encoder_K_Pin */
   GPIO_InitStruct.Pin = Encoder_K_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(Encoder_K_GPIO_Port, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : KeyBoard1_Pin KeyBoard2_Pin KeyBoard3_Pin KeyBoard4_Pin
-                           Button1_Pin */
-  GPIO_InitStruct.Pin = KeyBoard1_Pin|KeyBoard2_Pin|KeyBoard3_Pin|KeyBoard4_Pin
-                          |Button1_Pin;
+  /* 中文注释：玩家按键1~5均由板上10k上拉，按下为低。 */
+  GPIO_InitStruct.Pin = PlayerButton1_Pin | PlayerButton2_Pin | PlayerButton3_Pin |
+                        PlayerButton4_Pin | PlayerButton5_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
-
 }
-
-/* USER CODE BEGIN 2 */
-
-/* USER CODE END 2 */

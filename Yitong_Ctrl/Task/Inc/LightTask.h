@@ -7,9 +7,9 @@
 #define Light1_RGBbuffer_SIZE 26
 #define Light1_CRRbuffer_SIZE ((Light1_RGBbuffer_SIZE + 7) * 24)
 
-#define Light2_RGBbuffer_SIZE 44
+/* 中文注释：控台第二路原理图实际为LD27~LD74，共48颗WS2812。 */
+#define Light2_RGBbuffer_SIZE 48
 #define Light2_CRRbuffer_SIZE ((Light2_RGBbuffer_SIZE + 7) * 24)
-
 
 #define LightTime 300
 

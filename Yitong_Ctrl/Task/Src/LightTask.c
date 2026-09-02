@@ -18,13 +18,14 @@ Light_t Light1, Light2;
 BreathLight_t J1, J2;
 BreathLight_t *BreathList[] = {&J1, &J2};
 
-extern Tx_HandleTypeDef Tx1;
+extern Tx_HandleTypeDef Tx;
 extern Scene_t Scene;
 
 void Light_Init(void)
 {
     RGB_Init(&Light1, &htim3, TIM_CHANNEL_1, Light1_RGBbuffer_SIZE, Light1_RGBbuffer, Light1_CRRbuffer, &Light1_Semaphore, RGB);
-    RGB_Init(&Light2, &htim3, TIM_CHANNEL_4, Light2_RGBbuffer_SIZE, Light2_RGBbuffer, Light2_CRRbuffer, &Light2_Semaphore, RGB);
+    /* 中文注释：控台第二路WS2812实际接PB0/TIM3_CH3。 */
+    RGB_Init(&Light2, &htim3, TIM_CHANNEL_3, Light2_RGBbuffer_SIZE, Light2_RGBbuffer, Light2_CRRbuffer, &Light2_Semaphore, RGB);
     BreathLight_Init(&J1, &htim1, TIM_CHANNEL_1, GPIOA, GPIO_PIN_8);
     BreathLight_Init(&J2, &htim1, TIM_CHANNEL_2, GPIOA, GPIO_PIN_9);
     RegisterLight(ColorLight, &Light1);
@@ -63,8 +64,6 @@ static void LesslightSceneLight(void)
             j = 0;
     }
 
-    // LightEffect_Unblock_Breath_ChangeColor(&Light1, 18, Light1.LED_NUM, Color_table, 9, LightBoard_Lightness, 5, 1000);
-    // LightEffect_Unblock_Breath_ChangeColor(&Light2, 0, Light2.LED_NUM, Color_table, 9, LightBoard_Lightness, 5, 1000);
     for (uint8_t i = 0; i < 2; i++)
         BreathLight_SetLightKeep(BreathList[i], 0, LightBelt_Lightness, 255);
 }
