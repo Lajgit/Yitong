@@ -15,10 +15,60 @@
 #define BALL_WS2812_RESET_NOP_COUNT 5000U
 
 /* 球盘 PA7 对应 TIM3_CH2，但 STM32F103 的 TIM3_CH2 无可用 DMA 请求，正式版本采用 PA7 普通 GPIO 时序输出 WS2812。 */
-#define BALL_LIGHT_DELAY_T0H() do { __NOP(); __NOP(); __NOP(); __NOP(); __NOP(); __NOP(); __NOP(); __NOP(); } while (0)
-#define BALL_LIGHT_DELAY_T0L() do { __NOP(); __NOP(); __NOP(); __NOP(); __NOP(); __NOP(); __NOP(); __NOP(); __NOP(); __NOP(); __NOP(); __NOP(); __NOP(); __NOP(); } while (0)
-#define BALL_LIGHT_DELAY_T1H() do { __NOP(); __NOP(); __NOP(); __NOP(); __NOP(); __NOP(); __NOP(); __NOP(); __NOP(); __NOP(); __NOP(); __NOP(); __NOP(); __NOP(); } while (0)
-#define BALL_LIGHT_DELAY_T1L() do { __NOP(); __NOP(); __NOP(); __NOP(); __NOP(); __NOP(); __NOP(); __NOP(); } while (0)
+#define BALL_WS2812_NOP4()  \
+    do                      \
+    {                       \
+        __NOP();            \
+        __NOP();            \
+        __NOP();            \
+        __NOP();            \
+    } while (0)
+
+#define BALL_WS2812_NOP8()  \
+    do                      \
+    {                       \
+        BALL_WS2812_NOP4(); \
+        BALL_WS2812_NOP4(); \
+    } while (0)
+
+#define BALL_WS2812_NOP16() \
+    do                      \
+    {                       \
+        BALL_WS2812_NOP8(); \
+        BALL_WS2812_NOP8(); \
+    } while (0)
+
+/* 中文注释：PA7 GPIO bit-bang 时序采用实测已能点亮 WS2812 的延时参数，避免正式版延时过短导致灯珠不识别。 */
+#define BALL_LIGHT_DELAY_T0H() \
+    do                         \
+    {                          \
+        BALL_WS2812_NOP16();   \
+        BALL_WS2812_NOP4();    \
+    } while (0)
+
+#define BALL_LIGHT_DELAY_T0L() \
+    do                         \
+    {                          \
+        BALL_WS2812_NOP16();   \
+        BALL_WS2812_NOP16();   \
+        BALL_WS2812_NOP16();   \
+        BALL_WS2812_NOP4();    \
+    } while (0)
+
+#define BALL_LIGHT_DELAY_T1H() \
+    do                         \
+    {                          \
+        BALL_WS2812_NOP16();   \
+        BALL_WS2812_NOP16();   \
+        BALL_WS2812_NOP16();   \
+    } while (0)
+
+#define BALL_LIGHT_DELAY_T1L() \
+    do                         \
+    {                          \
+        BALL_WS2812_NOP16();   \
+        BALL_WS2812_NOP4();    \
+    } while (0)
 
 #define BALL_LIGHT_GPIO_SET() (BallLight_GPIO_Port->BSRR = BallLight_Pin)
 #define BALL_LIGHT_GPIO_CLR() (BallLight_GPIO_Port->BRR = BallLight_Pin)
