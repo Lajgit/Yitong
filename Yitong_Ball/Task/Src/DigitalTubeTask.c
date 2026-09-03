@@ -4,8 +4,8 @@
 
 #define DigitalTube_Refresh_Time 100U
 #define BALL_DIGITAL_BUFFER_SIZE 4U
-#define BALL_LEFT_MODULE_OFFSET 2U
-#define BALL_RIGHT_MODULE_OFFSET 0U
+#define BALL_LEFT_MODULE_OFFSET 0U
+#define BALL_RIGHT_MODULE_OFFSET 2U
 #define BALL_DIGITAL_ZERO_CODE 0x82U
 
 static uint8_t DigitalBuffer[BALL_DIGITAL_BUFFER_SIZE] = {BALL_DIGITAL_ZERO_CODE, BALL_DIGITAL_ZERO_CODE, BALL_DIGITAL_ZERO_CODE, BALL_DIGITAL_ZERO_CODE};
@@ -68,7 +68,7 @@ void BallDigitalTube_Set(uint8_t side, uint8_t value)
     /*
      * 中文注释：每块外接数码管模块使用一颗16位SM16306，但仅OUT0~OUT7接七段数码管。
      * 同一模块的两个字节写入相同段码，可避免16位移位高低字节方向差异影响显示。
-     * 实机测试发现两块数码管左右与原定义相反，当前已交换左右模块在四字节缓冲区中的偏移。
+     * 当前定义链路第一组16bit为左、第二组16bit为右；若实机线束左右顺序相反，仅交换上方两个OFFSET常量。
      */
     DigitalBuffer[offset] = segment;
     DigitalBuffer[offset + 1U] = segment;
