@@ -309,7 +309,7 @@ RGB_t RGB_Color(uint8_t R, uint8_t G, uint8_t B)
 void RGB_SetOneColor(Light_t *light, uint16_t LED_ID, RGB_t color, uint8_t AbsoluteLightness, uint8_t RelativeLightness)
 {
 
-    if (LED_ID > light->LED_NUM)
+    if (LED_ID >= light->LED_NUM)
         return;
     light->RGB_buffer[LED_ID].R = color.R * RelativeLightness * AbsoluteLightness / 2550;
     light->RGB_buffer[LED_ID].G = color.G * RelativeLightness * AbsoluteLightness / 2550;
@@ -369,9 +369,13 @@ bool SemaphoreGive(Semaphore_t *Semaphore)
 
 void RGB_FinishCallback(Light_t *light, DMA_HandleTypeDef *hdma)
 {
-    if (__HAL_DMA_GET_IT_SOURCE(hdma, DMA_IT_TC) == 0)
-    {
-        HAL_TIM_PWM_Stop_DMA(light->htim, light->Channel);
-        SemaphoreGive(light->Semaphore);
-    }
+    if (light == NULL || hdma == NULL)
+        return;
+
+    /*
+     * 中文注释：该函数在DMA通道中断中调用，HAL_DMA_IRQHandler后TC标志可能已清除，
+     * 不能用GET_IT_SOURCE判断完成；必须释放信号量以允许下一次WS2812刷新。
+     */
+    HAL_TIM_PWM_Stop_DMA(light->htim, light->Channel);
+    SemaphoreGive(light->Semaphore);
 }
