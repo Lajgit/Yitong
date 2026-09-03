@@ -7,6 +7,10 @@
 #define BALL_MODE_OFF 0x01U
 #define BALL_MODE_BLINK 0x02U
 #define BALL_MODE_BREATH 0x03U
+#define BALL_LIGHT_PA7_PERIOD_TEST 1U
+#define BALL_LIGHT_PA7_PERIOD_TEST_INTERVAL 500U
+#define BALL_LIGHT_PA7_PERIOD_TEST_COLOR 7U
+#define BALL_LIGHT_PA7_PERIOD_TEST_LIGHTNESS 10U
 
 static RGB_t Light1_RGBbuffer[Light1_RGBbuffer_SIZE];
 static uint8_t Light1_CRRbuffer[Light1_CRRbuffer_SIZE];
@@ -76,11 +80,45 @@ static uint8_t BallLight_GetRelativeLightness(uint8_t mode, uint32_t tick)
     return (uint8_t)(((2000U - phase) * 255U) / 1000U);
 }
 
+static void BallLight_PA7PeriodTest(uint32_t tick)
+{
+#if BALL_LIGHT_PA7_PERIOD_TEST
+    static uint32_t LastTestTick = 0U;
+    static uint8_t TestLedIndex = 0U;
+    static uint8_t TestStarted = 0U;
+
+    if (TestStarted == 0U || (uint32_t)(tick - LastTestTick) >= BALL_LIGHT_PA7_PERIOD_TEST_INTERVAL)
+    {
+        for (uint8_t i = 0U; i < BALL_LED_COUNT; i++)
+        {
+            BallLedColor[i] = BALL_LIGHT_PA7_PERIOD_TEST_COLOR;
+            BallLedMode[i] = BALL_MODE_OFF;
+        }
+
+        /* 中文注释：PA7测试模式每500ms轮流点亮5颗灯，并强制发送一次WS2812数据，便于示波器抓波形。 */
+        BallLedMode[TestLedIndex] = BALL_MODE_ON;
+        BallLightness = BALL_LIGHT_PA7_PERIOD_TEST_LIGHTNESS;
+        BallLightDirty = 1U;
+
+        TestLedIndex++;
+        if (TestLedIndex >= BALL_LED_COUNT)
+            TestLedIndex = 0U;
+
+        LastTestTick = tick;
+        TestStarted = 1U;
+    }
+#else
+    (void)tick;
+#endif
+}
+
 void Light_Task(void)
 {
     static uint32_t LastRefreshTick = 0U;
     uint32_t CurrentTick = HAL_GetTick();
     uint8_t DynamicMode = 0U;
+
+    BallLight_PA7PeriodTest(CurrentTick);
 
     for (uint8_t i = 0U; i < BALL_LED_COUNT; i++)
     {
