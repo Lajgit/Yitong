@@ -38,7 +38,7 @@ extern "C" {
 
 /* USER CODE END Private defines */
 
-void MX_DMA_Init(void);
+/* 球盘正式版本无 DMA 外设初始化入口。 */
 
 /* USER CODE BEGIN Prototypes */
 

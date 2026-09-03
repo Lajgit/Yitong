@@ -7,9 +7,7 @@
   */
 /* USER CODE END Header */
 #include "main.h"
-#include "dma.h"
 #include "iwdg.h"
-#include "tim.h"
 #include "usart.h"
 #include "gpio.h"
 
@@ -25,8 +23,7 @@ int main(void)
   SystemClock_Config();
 
   MX_GPIO_Init();
-  MX_DMA_Init();
-  MX_TIM3_Init();
+  /* 球盘 PA7 WS2812 改为 GPIO 时序输出，不再初始化 TIM3_CH2/DMA。 */
   /* 中文注释：球盘与主板固定使用USART2/PA2/PA3。 */
   MX_USART2_UART_Init();
   MX_IWDG_Init();

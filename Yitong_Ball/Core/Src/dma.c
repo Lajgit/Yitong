@@ -8,11 +8,4 @@
 /* USER CODE END Header */
 #include "dma.h"
 
-void MX_DMA_Init(void)
-{
-  __HAL_RCC_DMA1_CLK_ENABLE();
-
-  /* 中文注释：球盘PA7/TIM3_CH2的WS2812发送使用DMA1_Channel3。 */
-  HAL_NVIC_SetPriority(DMA1_Channel3_IRQn, 0, 0);
-  HAL_NVIC_EnableIRQ(DMA1_Channel3_IRQn);
-}
+/* 球盘 PA7 WS2812 已改为 GPIO 时序输出，不再启用旧 TIM3_CH2/DMA1_Channel3。 */

@@ -10,12 +10,9 @@
 #include "stm32f1xx_it.h"
 /* USER CODE BEGIN Includes */
 #include "port_lighteffect.h"
-#include "LightTask.h"
 /* USER CODE END Includes */
 
-extern DMA_HandleTypeDef hdma_tim3_ch2;
 extern UART_HandleTypeDef huart2;
-extern Light_t Light1;
 
 void NMI_Handler(void)
 {
@@ -68,12 +65,6 @@ void SysTick_Handler(void)
 {
   HAL_IncTick();
   LightEffectTimer_ISR();
-}
-
-void DMA1_Channel3_IRQHandler(void)
-{
-  HAL_DMA_IRQHandler(&hdma_tim3_ch2);
-  RGB_FinishCallback(&Light1, &hdma_tim3_ch2);
 }
 
 void USART2_IRQHandler(void)

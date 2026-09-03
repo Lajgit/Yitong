@@ -17,15 +17,15 @@ extern "C" {
 
 void Error_Handler(void);
 
-/* 中文注释：球盘原理图User_Led实际接PA15，作为普通GPIO状态灯使用。 */
+/* 球盘原理图 User_Led 实际接 PA15，作为普通 GPIO 状态灯使用。 */
 #define User_Led_Pin GPIO_PIN_15
 #define User_Led_GPIO_Port GPIOA
 
-/* 中文注释：球盘5颗WS2812串联，数据输入接PA7/TIM3_CH2。 */
+/* 球盘 5 颗 WS2812 数据输入接 PA7，正式版本使用 GPIO 时序输出。 */
 #define BallLight_Pin GPIO_PIN_7
 #define BallLight_GPIO_Port GPIOA
 
-/* 中文注释：球盘本板5组光眼为PB3~PB7。 */
+/* 球盘本板 5 组光眼为 PB3~PB7。 */
 #define BallEye1_Pin GPIO_PIN_3
 #define BallEye1_GPIO_Port GPIOB
 #define BallEye2_Pin GPIO_PIN_4
@@ -37,13 +37,13 @@ void Error_Handler(void);
 #define BallEye5_Pin GPIO_PIN_7
 #define BallEye5_GPIO_Port GPIOB
 
-/* 中文注释：两块外接单数码管模块的光眼反馈分别进入PA4/PA5。 */
+/* 两块外接单数码管模块的光眼反馈分别进入 PA4/PA5。 */
 #define BallEyeFB1_Pin GPIO_PIN_4
 #define BallEyeFB1_GPIO_Port GPIOA
 #define BallEyeFB2_Pin GPIO_PIN_5
 #define BallEyeFB2_GPIO_Port GPIOA
 
-/* 中文注释：两块级联SM16306数码管模块使用PB12~PB15软件移位。 */
+/* 两块级联 SM16306 数码管模块使用 PB12~PB15 软件移位。 */
 #define Tube_OE_Pin GPIO_PIN_12
 #define Tube_OE_GPIO_Port GPIOB
 #define Tube_RCLK_Pin GPIO_PIN_13
