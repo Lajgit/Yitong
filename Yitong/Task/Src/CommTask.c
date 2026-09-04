@@ -41,6 +41,7 @@ extern Event_Handle_t Mesg_event;
 extern Motor_Card Card;
 extern Motor_Hoolle Motor_Hoolle1;
 extern Motor_Hoolle Motor_Hoolle2;
+extern servo_t Servo1;
 extern Switch_Valve Lock_Valve;
 extern ListHandle_t ResendList, DealList;
 
@@ -199,10 +200,6 @@ static void USART1_Deal(void *Rx_mesg)
             EventGroupSetBits(&Mesg_event, MesgEvent_Unlock);
             break;
 
-        case r_ServoControl:
-            Servo_SetRun(mesg->ExpandCode == 0x01U ? 1U : 0U);
-            break;
-
         case r_LightControl:
             /* 中文注释：安卓0x15与主板→球盘0x02字段一致，原样转发。 */
             Comm_SendMesg_FillData(&Tx2, Board_to_Ball, BALL_CMD_RGB_MODE, data, mesg->ExpandCode);
@@ -322,11 +319,25 @@ static void USART3_Deal(void *Rx_mesg)
         break;
 
     case CTRL_REPORT_ENCODER:
-        if (mesg->ExpandCode <= 0x01U)
+        /*
+         * 中文注释：沿用弹界编码器控制舵机逻辑：
+         * 0x00每次增加1°，0x01每次减少1°，并继续按安卓0x0F原值上报；
+         * 0x02编码器按下将舵机归中到90°，安卓0x0F未定义按下事件，因此不转发。
+         */
+        if (mesg->ExpandCode == 0x00U)
         {
-            Comm_SendMesg_FillData(&Tx1, Board_to_Android, t_Encoder, 0U, mesg->ExpandCode);
+            Servo1.IncreaseAngle(&Servo1, 1U);
+            Comm_SendMesg_FillData(&Tx1, Board_to_Android, t_Encoder, 0U, 0x00U);
         }
-        /* 中文注释：控台定义0x02=编码器按下，但安卓0x0F仅定义左/右，因此按下暂不转发。 */
+        else if (mesg->ExpandCode == 0x01U)
+        {
+            Servo1.DecreaseAngle(&Servo1, 1U);
+            Comm_SendMesg_FillData(&Tx1, Board_to_Android, t_Encoder, 0U, 0x01U);
+        }
+        else if (mesg->ExpandCode == 0x02U)
+        {
+            Servo1.SetAngle(&Servo1, 90U);
+        }
         break;
 
     default:

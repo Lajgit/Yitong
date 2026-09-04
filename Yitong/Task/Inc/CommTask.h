@@ -76,7 +76,6 @@
 #define r_ResumeDefultSetting 0x0DU
 #define r_SaveSetting 0x0EU
 #define r_Unlock 0x10U
-#define r_ServoControl 0x14U
 #define r_LightControl 0x15U
 #define r_CtrlButtonLight 0x17U
 #define r_ServoReset 0x18U
