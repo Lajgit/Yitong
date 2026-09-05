@@ -253,12 +253,10 @@ void Device_Init(void)
 void Servo_SetRun(uint8_t enable)
 {
     /*
-     * 中文注释：安卓0x14补充位0/1控制舵机停止/自动摆动；
-     * 安卓0x18归零复用关闭路径，关闭后立即回到90度中位。
+     * 中文注释：舵机自动旋转只控制自动运行状态。
+     * 停止时保持当前角度，归中到90°由安卓0x18独立处理。
      */
     Servo1Run = enable != 0U ? 1U : 0U;
-    if (Servo1Run == 0U)
-        Servo1.SetAngle(&Servo1, 90U);
 }
 
 static void Servo_AutoRun(servo_t *Servo, uint32_t time)

@@ -172,6 +172,12 @@ static void USART1_Deal(void *Rx_mesg)
             /* 中文注释：分板协议未定义中奖通道下发目标，保持不处理。 */
             break;
 
+        case r_ServoAutoRotate:
+            /* 中文注释：安卓0x09补充位0x00停止舵机自动旋转，0x01开启自动旋转。 */
+            if (mesg->ExpandCode == 0x00U || mesg->ExpandCode == 0x01U)
+                Servo_SetRun(mesg->ExpandCode);
+            break;
+
         case r_OutputAllHoolle:
             /*
              * 中文注释：协议0x0B补充位固定0x00，对应瓷珠通道；
@@ -210,7 +216,9 @@ static void USART1_Deal(void *Rx_mesg)
             break;
 
         case r_ServoReset:
+            /* 中文注释：安卓0x18先停止自动旋转，再将舵机归中到90°。 */
             Servo_SetRun(0U);
+            Servo1.SetAngle(&Servo1, 90U);
             break;
 
         case r_SteelBallMotorSwitch:

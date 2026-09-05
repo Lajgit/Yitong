@@ -71,6 +71,7 @@
 #define r_SceneChange 0x06U
 #define r_LightBeltMode 0x07U
 #define r_WinChannel 0x08U
+#define r_ServoAutoRotate 0x09U
 #define r_OutputAllHoolle 0x0BU
 #define r_OutputRemainingItem 0x0CU
 #define r_ResumeDefultSetting 0x0DU
