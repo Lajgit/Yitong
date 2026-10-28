@@ -14,7 +14,7 @@
 #define BALL_LIGHT_BREATH_PERIOD 2000U
 #define BALL_WS2812_RESET_NOP_COUNT 5000U
 
-/* 球盘 PA7 对应 TIM3_CH2，但 STM32F103 的 TIM3_CH2 无可用 DMA 请求，正式版本采用 PA7 普通 GPIO 时序输出 WS2812。 */
+/* 球盘 WS2812 数据脚由 PA7 改接 PA6，继续使用普通 GPIO 时序输出，不启用 TIM/DMA。 */
 #define BALL_WS2812_NOP4()  \
     do                      \
     {                       \
@@ -38,7 +38,7 @@
         BALL_WS2812_NOP8(); \
     } while (0)
 
-/* 中文注释：PA7 GPIO bit-bang 时序采用实测已能点亮 WS2812 的延时参数，避免正式版延时过短导致灯珠不识别。 */
+/* 中文注释：PA6 GPIO bit-bang 保留原已实测点亮 WS2812 的延时参数，避免延时过短导致灯珠不识别。 */
 #define BALL_LIGHT_DELAY_T0H() \
     do                         \
     {                          \

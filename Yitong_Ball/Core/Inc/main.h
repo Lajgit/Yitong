@@ -21,8 +21,8 @@ void Error_Handler(void);
 #define User_Led_Pin GPIO_PIN_15
 #define User_Led_GPIO_Port GPIOA
 
-/* 球盘 5 颗 WS2812 数据输入接 PA7，正式版本使用 GPIO 时序输出。 */
-#define BallLight_Pin GPIO_PIN_7
+/* 球盘新硬件将 5 颗 WS2812 数据输入改接 PA6，继续使用 GPIO 时序输出。 */
+#define BallLight_Pin GPIO_PIN_6
 #define BallLight_GPIO_Port GPIOA
 
 /* 球盘本板 5 组光眼为 PB3~PB7。 */

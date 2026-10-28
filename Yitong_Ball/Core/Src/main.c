@@ -23,7 +23,7 @@ int main(void)
   SystemClock_Config();
 
   MX_GPIO_Init();
-  /* 球盘 PA7 WS2812 改为 GPIO 时序输出，不再初始化 TIM3_CH2/DMA。 */
+  /* 球盘 PA6 WS2812 使用 GPIO 时序输出，不初始化 TIM/DMA 驱动灯珠。 */
   /* 中文注释：球盘与主板固定使用USART2/PA2/PA3。 */
   MX_USART2_UART_Init();
   MX_IWDG_Init();
