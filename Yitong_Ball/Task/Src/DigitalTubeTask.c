@@ -22,7 +22,7 @@ void DigitalTubeTask_Init(void)
     DigitalTube_Init_t Init;
     SoftwareSPI_InitTypeDef SpiInit;
 
-    /* 中文注释：PB15=数据、PB14=移位时钟、PB13=锁存，不能使用硬件SPI2。 */
+    /* 中文注释：按新硬件接线，PB15=数据、PB13=移位时钟、PB14=锁存，继续使用GPIO软件移位。 */
     SpiInit.SDA_Port = Tube_SER_GPIO_Port;
     SpiInit.SDA_Pin = Tube_SER_Pin;
     SpiInit.CLK_Port = Tube_SRCLK_GPIO_Port;

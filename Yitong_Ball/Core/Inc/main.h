@@ -46,9 +46,10 @@ void Error_Handler(void);
 /* 两块级联 SM16306 数码管模块使用 PB12~PB15 软件移位。 */
 #define Tube_OE_Pin GPIO_PIN_12
 #define Tube_OE_GPIO_Port GPIOB
-#define Tube_RCLK_Pin GPIO_PIN_13
+/* 球盘新硬件接线：PB13 为 SRCLK 移位时钟，PB14 为 RCLK 锁存。 */
+#define Tube_RCLK_Pin GPIO_PIN_14
 #define Tube_RCLK_GPIO_Port GPIOB
-#define Tube_SRCLK_Pin GPIO_PIN_14
+#define Tube_SRCLK_Pin GPIO_PIN_13
 #define Tube_SRCLK_GPIO_Port GPIOB
 #define Tube_SER_Pin GPIO_PIN_15
 #define Tube_SER_GPIO_Port GPIOB
