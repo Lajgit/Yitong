@@ -48,5 +48,5 @@ void Main_Task(void)
     HAL_IWDG_Refresh(&hiwdg);
     DigitalTube_Task();
     HAL_IWDG_Refresh(&hiwdg);
-    SystemLight_Task();
+    // SystemLight_Task();
 }
