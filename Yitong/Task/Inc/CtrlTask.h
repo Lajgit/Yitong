@@ -9,7 +9,8 @@
 #define HoolleMotorRetry_Times 3
 #define ValveTimeout_time 800
 
-#define HoolleMotor_Speed 100
+/* 钢珠电机1速度设为80，按数量出珠和手动运行均使用此参数。 */
+#define HoolleMotor_Speed 80
 #define HoolleMotor2_Speed 80
 #define HoolleMotor_Dir 0
 

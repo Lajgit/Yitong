@@ -143,7 +143,8 @@ static void Hoolle_2_Output_IRQ(void)
     }
 
     LowCount = __HAL_TIM_GetCounter(&htim7);
-    if (LowCount > 1U)
+    /* 电机2与电机1使用相同的20计数低电平过滤门槛，抑制短脉冲误计数。 */
+    if (LowCount > HOOLLE_LOW_MIN_COUNT)
     {
         if (Motor_Hoolle2.Hoolle_num > 0U)
         {

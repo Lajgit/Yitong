@@ -179,16 +179,23 @@ static void USART1_Deal(void *Rx_mesg)
             break;
 
         case r_OutputAllHoolle:
-            /*
-             * 中文注释：协议0x0B补充位固定0x00，对应瓷珠通道；
-             * 不同时清钢珠，避免改变原协议中0x00瓷珠/0x01钢珠的类型语义。
-             */
-            Motor_Hoolle2.ClearMode = 1U;
-            Hoolle_Output(&Motor_Hoolle2, (uint16_t)(0xFFFFU - Motor_Hoolle2.Hoolle_num));
+            /* 新协议0x0B按补充位选择清珠：0x00=瓷珠电机2，0x01=钢珠电机1。 */
+            if (mesg->ExpandCode == HOOLLE_TYPE_NORMAL)
+            {
+                Motor_Hoolle2.ClearMode = 1U;
+                Hoolle_Output(&Motor_Hoolle2, (uint16_t)(0xFFFFU - Motor_Hoolle2.Hoolle_num));
+            }
+            else if (mesg->ExpandCode == HOOLLE_TYPE_STEEL_BALL)
+            {
+                /* 沿用出珠函数的手动运行保护，不在清珠命令中强制退出0x21手动模式。 */
+                Motor_Hoolle1.ClearMode = 1U;
+                Hoolle_Output(&Motor_Hoolle1, (uint16_t)(0xFFFFU - Motor_Hoolle1.Hoolle_num));
+            }
             break;
 
         case r_OutputRemainingItem:
-            /* 中文注释：协议“吐出剩余物品”沿用原逻辑，仅继续瓷珠和卡片。 */
+            /* 新协议0x0C恢复钢珠、瓷珠和卡片的剩余输出；传0不增加待出数量。 */
+            Hoolle_Output(&Motor_Hoolle1, 0U);
             Hoolle_Output(&Motor_Hoolle2, 0U);
             Card_Output(&Card, 0U);
             break;
