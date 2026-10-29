@@ -7,7 +7,9 @@
   */
 /* USER CODE END Header */
 #include "main.h"
+#include "dma.h"
 #include "iwdg.h"
+#include "tim.h"
 #include "usart.h"
 #include "gpio.h"
 
@@ -23,7 +25,9 @@ int main(void)
   SystemClock_Config();
 
   MX_GPIO_Init();
-  /* 球盘 PA6 WS2812 使用 GPIO 时序输出，不初始化 TIM/DMA 驱动灯珠。 */
+  /* 球盘 PA6 恢复 TIM3_CH1 PWM/DMA 发送，先使能 DMA 时钟再初始化定时器。 */
+  MX_DMA_Init();
+  MX_TIM3_Init();
   /* 中文注释：球盘与主板固定使用USART2/PA2/PA3。 */
   MX_USART2_UART_Init();
   MX_IWDG_Init();

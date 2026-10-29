@@ -21,7 +21,7 @@ void Error_Handler(void);
 #define User_Led_Pin GPIO_PIN_15
 #define User_Led_GPIO_Port GPIOA
 
-/* 球盘新硬件将 5 颗 WS2812 数据输入改接 PA6，继续使用 GPIO 时序输出。 */
+/* 球盘 5 颗 WS2812 接 PA6，使用 TIM3_CH1 PWM 和 DMA1_Channel6 输出。 */
 #define BallLight_Pin GPIO_PIN_6
 #define BallLight_GPIO_Port GPIOA
 

@@ -8,4 +8,11 @@
 /* USER CODE END Header */
 #include "dma.h"
 
-/* 球盘 PA7 WS2812 已改为 GPIO 时序输出，不再启用旧 TIM3_CH2/DMA1_Channel3。 */
+void MX_DMA_Init(void)
+{
+  __HAL_RCC_DMA1_CLK_ENABLE();
+
+  /* 波形由 DMA 硬件输出，完成中断只负责结束发送，USART2 中断仍可正常响应。 */
+  HAL_NVIC_SetPriority(DMA1_Channel6_IRQn, 1, 0);
+  HAL_NVIC_EnableIRQ(DMA1_Channel6_IRQn);
+}

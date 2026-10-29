@@ -10,6 +10,7 @@
 #include "stm32f1xx_it.h"
 /* USER CODE BEGIN Includes */
 #include "port_lighteffect.h"
+#include "tim.h"
 /* USER CODE END Includes */
 
 extern UART_HandleTypeDef huart2;
@@ -65,6 +66,12 @@ void SysTick_Handler(void)
 {
   HAL_IncTick();
   LightEffectTimer_ISR();
+}
+
+void DMA1_Channel6_IRQHandler(void)
+{
+  /* 仅交给 HAL 分发完成/错误回调，不再用 DMA 中断使能位判断传输完成。 */
+  HAL_DMA_IRQHandler(&hdma_tim3_ch1_trig);
 }
 
 void USART2_IRQHandler(void)

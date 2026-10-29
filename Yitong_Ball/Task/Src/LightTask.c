@@ -1,5 +1,7 @@
 #include "LightTask.h"
 #include "main.h"
+#include "tim.h"
+#include "string.h"
 
 #define BALL_LED_COUNT 5U
 #define BALL_COLOR_COUNT 9U
@@ -12,66 +14,16 @@
 #define BALL_LIGHT_REFRESH_INTERVAL 20U
 #define BALL_LIGHT_BLINK_INTERVAL 500U
 #define BALL_LIGHT_BREATH_PERIOD 2000U
-#define BALL_WS2812_RESET_NOP_COUNT 5000U
+/* PA6 对应 TIM3_CH1，使用 DMA1_Channel6；不恢复旧 PA7/TIM3_CH2 的无效 DMA 配置。 */
+#define BALL_WS2812_CODE_0 24U
+#define BALL_WS2812_CODE_1 63U
+#define BALL_WS2812_RESET_SLOTS 256U
+#define BALL_WS2812_PWM_SIZE (1U + BALL_LED_COUNT * 24U + BALL_WS2812_RESET_SLOTS)
 
-/* 球盘 WS2812 数据脚由 PA7 改接 PA6，继续使用普通 GPIO 时序输出，不启用 TIM/DMA。 */
-#define BALL_WS2812_NOP4()  \
-    do                      \
-    {                       \
-        __NOP();            \
-        __NOP();            \
-        __NOP();            \
-        __NOP();            \
-    } while (0)
-
-#define BALL_WS2812_NOP8()  \
-    do                      \
-    {                       \
-        BALL_WS2812_NOP4(); \
-        BALL_WS2812_NOP4(); \
-    } while (0)
-
-#define BALL_WS2812_NOP16() \
-    do                      \
-    {                       \
-        BALL_WS2812_NOP8(); \
-        BALL_WS2812_NOP8(); \
-    } while (0)
-
-/* 中文注释：PA6 GPIO bit-bang 保留原已实测点亮 WS2812 的延时参数，避免延时过短导致灯珠不识别。 */
-#define BALL_LIGHT_DELAY_T0H() \
-    do                         \
-    {                          \
-        BALL_WS2812_NOP16();   \
-        BALL_WS2812_NOP4();    \
-    } while (0)
-
-#define BALL_LIGHT_DELAY_T0L() \
-    do                         \
-    {                          \
-        BALL_WS2812_NOP16();   \
-        BALL_WS2812_NOP16();   \
-        BALL_WS2812_NOP16();   \
-        BALL_WS2812_NOP4();    \
-    } while (0)
-
-#define BALL_LIGHT_DELAY_T1H() \
-    do                         \
-    {                          \
-        BALL_WS2812_NOP16();   \
-        BALL_WS2812_NOP16();   \
-        BALL_WS2812_NOP16();   \
-    } while (0)
-
-#define BALL_LIGHT_DELAY_T1L() \
-    do                         \
-    {                          \
-        BALL_WS2812_NOP16();   \
-        BALL_WS2812_NOP4();    \
-    } while (0)
-
-#define BALL_LIGHT_GPIO_SET() (BallLight_GPIO_Port->BSRR = BallLight_Pin)
-#define BALL_LIGHT_GPIO_CLR() (BallLight_GPIO_Port->BRR = BallLight_Pin)
+/* 72MHz/90=800kHz，0/1 高电平分别约 0.333us/0.875us；尾部 256 个零占空比周期约 320us。 */
+static uint16_t BallLightPwmBuffer[BALL_WS2812_PWM_SIZE];
+static volatile uint8_t BallLightDmaBusy = 0U;
+static volatile uint8_t BallLightDmaRetry = 0U;
 
 static uint8_t BallLedColor[BALL_LED_COUNT] = {0U};
 static uint8_t BallLedMode[BALL_LED_COUNT] = {
@@ -84,23 +36,14 @@ static uint8_t BallLedMode[BALL_LED_COUNT] = {
 static uint8_t BallLightness = 5U;
 static uint8_t BallLightDirty = 1U;
 
-static void BallLight_GpioTimingInit(void)
-{
-    GPIO_InitTypeDef GPIO_InitStruct = {0};
-
-    __HAL_RCC_GPIOA_CLK_ENABLE();
-
-    HAL_GPIO_WritePin(BallLight_GPIO_Port, BallLight_Pin, GPIO_PIN_RESET);
-
-    GPIO_InitStruct.Pin = BallLight_Pin;
-    GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
-    HAL_GPIO_Init(BallLight_GPIO_Port, &GPIO_InitStruct);
-}
-
 void Light_Init(void)
 {
-    BallLight_GpioTimingInit();
+    memset(BallLightPwmBuffer, 0, sizeof(BallLightPwmBuffer));
+    /* 上电先用零占空比保持低电平 1ms，再由任务发送五颗灯的完整全灭帧。 */
+    __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, 0U);
+    if (HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1) != HAL_OK)
+        Error_Handler();
+    HAL_Delay(1U);
     BallLightDirty = 1U;
 }
 
@@ -179,75 +122,80 @@ static uint8_t BallLight_ScaleColor(uint8_t value, uint8_t relative)
     return (uint8_t)scaled;
 }
 
-static void BallLight_GpioSendBit(uint8_t bit)
-{
-    if (bit != 0U)
-    {
-        BALL_LIGHT_GPIO_SET();
-        BALL_LIGHT_DELAY_T1H();
-        BALL_LIGHT_GPIO_CLR();
-        BALL_LIGHT_DELAY_T1L();
-    }
-    else
-    {
-        BALL_LIGHT_GPIO_SET();
-        BALL_LIGHT_DELAY_T0H();
-        BALL_LIGHT_GPIO_CLR();
-        BALL_LIGHT_DELAY_T0L();
-    }
-}
-
-static void BallLight_GpioSendByte(uint8_t data)
+static uint16_t BallLight_DmaEncodeByte(uint16_t offset, uint8_t data)
 {
     uint8_t mask;
 
     for (mask = 0x80U; mask != 0U; mask >>= 1U)
     {
-        BallLight_GpioSendBit((data & mask) != 0U);
+        BallLightPwmBuffer[offset++] = (data & mask) != 0U ? BALL_WS2812_CODE_1 : BALL_WS2812_CODE_0;
     }
+    return offset;
 }
 
-static void BallLight_GpioResetDelay(void)
+static void BallLight_DmaIdle(void)
 {
-    volatile uint32_t delay = BALL_WS2812_RESET_NOP_COUNT;
-
-    BALL_LIGHT_GPIO_CLR();
-    while (delay-- != 0U)
-    {
-        __NOP();
-    }
+    HAL_TIM_PWM_Stop_DMA(&htim3, TIM_CHANNEL_1);
+    __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, 0U);
+    __HAL_TIM_SET_COUNTER(&htim3, 0U);
+    htim3.Instance->EGR = TIM_EGR_UG;
+    /* 完成/错误后恢复零占空比输出，空闲期间 PA6 保持低电平。 */
+    if (HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1) != HAL_OK)
+        Error_Handler();
+    BallLightDmaBusy = 0U;
 }
 
-static void BallLight_GpioFlush(uint32_t tick)
+static bool BallLight_DmaFlush(uint32_t tick)
 {
     uint8_t i;
     uint8_t relative;
     RGB_t color;
-    uint32_t primask;
+    uint16_t offset = 1U;
 
-    /* 发送 WS2812 数据期间关闭中断，避免位宽被中断打断；发送完成后恢复进入函数前的中断状态。 */
-    primask = __get_PRIMASK();
-    __disable_irq();
-
+    /* DMA 空闲时才编码完整 GRB 帧，传输中不改缓冲区，串口中断始终保持开启。 */
     for (i = 0U; i < BALL_LED_COUNT; i++)
     {
         relative = BallLight_GetRelativeLightness(BallLedMode[i], tick);
         color = Color_table[BallLedColor[i]];
 
-        BallLight_GpioSendByte(BallLight_ScaleColor(color.G, relative));
-        BallLight_GpioSendByte(BallLight_ScaleColor(color.R, relative));
-        BallLight_GpioSendByte(BallLight_ScaleColor(color.B, relative));
+        offset = BallLight_DmaEncodeByte(offset, BallLight_ScaleColor(color.G, relative));
+        offset = BallLight_DmaEncodeByte(offset, BallLight_ScaleColor(color.R, relative));
+        offset = BallLight_DmaEncodeByte(offset, BallLight_ScaleColor(color.B, relative));
     }
 
-    BALL_LIGHT_GPIO_CLR();
-
-    if (primask == 0U)
+    /* 首位及尾部保持零占空比；重新装载预装寄存器，避免上一帧 CCR 残值影响起始位。 */
+    HAL_TIM_PWM_Stop(&htim3, TIM_CHANNEL_1);
+    __HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, 0U);
+    __HAL_TIM_SET_COUNTER(&htim3, 0U);
+    htim3.Instance->EGR = TIM_EGR_UG;
+    __HAL_TIM_CLEAR_FLAG(&htim3, TIM_FLAG_CC1 | TIM_FLAG_UPDATE);
+    BallLightDmaBusy = 1U;
+    if (HAL_TIM_PWM_Start_DMA(&htim3, TIM_CHANNEL_1,
+                              (uint32_t *)BallLightPwmBuffer, BALL_WS2812_PWM_SIZE) != HAL_OK)
     {
-        __enable_irq();
+        BallLight_DmaIdle();
+        return false;
     }
+    return true;
+}
 
-    /* WS2812 复位/锁存要求低电平至少 50us，低电平保持不需要继续关中断。 */
-    BallLight_GpioResetDelay();
+void HAL_TIM_PWM_PulseFinishedCallback(TIM_HandleTypeDef *htim)
+{
+    if (htim == &htim3 && htim->Channel == HAL_TIM_ACTIVE_CHANNEL_1)
+    {
+        /* HAL 已确认 DMA 完成，尾部复位低电平也已发送，直接释放发送状态供下一帧使用。 */
+        BallLight_DmaIdle();
+    }
+}
+
+void HAL_TIM_ErrorCallback(TIM_HandleTypeDef *htim)
+{
+    if (htim == &htim3 && htim->Channel == HAL_TIM_ACTIVE_CHANNEL_1)
+    {
+        /* DMA 错误后解除忙状态，并让主循环重新发送，避免灯珠刷新永久停住。 */
+        BallLightDmaRetry = 1U;
+        BallLight_DmaIdle();
+    }
 }
 
 void Light_Task(void)
@@ -258,6 +206,14 @@ void Light_Task(void)
     uint8_t i;
 
     CurrentTick = HAL_GetTick();
+
+    if (BallLightDmaBusy != 0U)
+        return;
+    if (BallLightDmaRetry != 0U)
+    {
+        BallLightDmaRetry = 0U;
+        BallLightDirty = 1U;
+    }
 
     for (i = 0U; i < BALL_LED_COUNT; i++)
     {
@@ -278,7 +234,8 @@ void Light_Task(void)
         return;
     }
 
-    BallLight_GpioFlush(CurrentTick);
+    if (BallLight_DmaFlush(CurrentTick) == false)
+        return;
     BallLightDirty = 0U;
     LastRefreshTick = CurrentTick;
 }

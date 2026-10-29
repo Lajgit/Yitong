@@ -58,19 +58,19 @@ void Rx_Receive(void *self, void *mesg, uint8_t mesg_len)
                     rx->Queue.Index++;
                 }
                 break;
-            /// 接收数据阶段，直到接收到帧尾或队列满
+            /// 接收数据阶段，收满固定帧长后再检查帧尾
             case RECEIVE_DATA:
                 // 若队列未满，继续存储数据；否则放弃当前帧并重同步
                 if (rx->Queue.Index < rx->Queue.Buf_Size)
                     rx->Queue.Buf[rx->Queue.Index] = rx->CurrData;
                 else
                     rx->State = WAIT_HEAD;
-                // 若接收到帧尾且帧长度符合条件，进行解包和处理，并重置状态以接收下一帧
-                // 协议固定帧长为14字节；异常长帧遇到帧尾时只复位丢弃，避免越界拷贝。
-                if (rx->CurrData == rx->Frame_Tail)
+                // 协议固定14字节，ID/数据/CRC中的0x55是合法内容，不能提前结束接收。
+                // 仅在第14字节检查帧尾，错误帧丢弃；拷贝长度仍固定，避免长帧越界。
+                if (rx->Queue.Index == mesg_len - 1)
                 {
                     rx->State = WAIT_HEAD;
-                    if (rx->Queue.Index == mesg_len - 1)
+                    if (rx->CurrData == rx->Frame_Tail)
                     {
                         memcpy(mesg, rx->Queue.Buf, mesg_len);
                         /// 解包并处理

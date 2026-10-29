@@ -38,7 +38,8 @@ extern "C" {
 
 /* USER CODE END Private defines */
 
-/* 球盘正式版本无 DMA 外设初始化入口。 */
+/* 球盘 PA6/TIM3_CH1 的 WS2812 发送使用 DMA1_Channel6。 */
+void MX_DMA_Init(void);
 
 /* USER CODE BEGIN Prototypes */
 
