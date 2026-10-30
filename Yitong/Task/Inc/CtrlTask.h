@@ -43,5 +43,9 @@ void SteelBall_MotorSwitch(uint8_t enable);
 void SteelBall_OutputEverySecond(void);
 void Card_Output(Motor_Card *Switch, uint16_t num);
 void Servo_SetRun(uint8_t enable);
+/* 舵机有效控制后200ms释放PWM，已到限位的同向操作不刷新计时。 */
+void Servo1_Decrease(void);
+void Servo1_Increase(void);
+void Servo1_Reset(void);
 
 #endif

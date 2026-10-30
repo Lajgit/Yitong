@@ -41,7 +41,6 @@ extern Event_Handle_t Mesg_event;
 extern Motor_Card Card;
 extern Motor_Hoolle Motor_Hoolle1;
 extern Motor_Hoolle Motor_Hoolle2;
-extern servo_t Servo1;
 extern Switch_Valve Lock_Valve;
 extern ListHandle_t ResendList, DealList;
 
@@ -223,9 +222,9 @@ static void USART1_Deal(void *Rx_mesg)
             break;
 
         case r_ServoReset:
-            /* 中文注释：安卓0x18先停止自动旋转，再将舵机归中到90°。 */
+            /* 中文注释：安卓0x18先停止自动旋转，再归中到90°并在200ms后释放PWM。 */
             Servo_SetRun(0U);
-            Servo1.SetAngle(&Servo1, 90U);
+            Servo1_Reset();
             break;
 
         case r_SteelBallMotorSwitch:
@@ -338,20 +337,21 @@ static void USART3_Deal(void *Rx_mesg)
          * 中文注释：沿用弹界编码器控制舵机逻辑：
          * 0x00每次增加1°，0x01每次减少1°，并继续按安卓0x0F原值上报；
          * 0x02编码器按下将舵机归中到90°，安卓0x0F未定义按下事件，因此不转发。
+         * 有效控制后200ms释放PWM，达到限位后的同向操作不刷新计时。
          */
         if (mesg->ExpandCode == 0x00U)
         {
-            Servo1.IncreaseAngle(&Servo1, 1U);
+            Servo1_Increase();
             Comm_SendMesg_FillData(&Tx1, Board_to_Android, t_Encoder, 0U, 0x00U);
         }
         else if (mesg->ExpandCode == 0x01U)
         {
-            Servo1.DecreaseAngle(&Servo1, 1U);
+            Servo1_Decrease();
             Comm_SendMesg_FillData(&Tx1, Board_to_Android, t_Encoder, 0U, 0x01U);
         }
         else if (mesg->ExpandCode == 0x02U)
         {
-            Servo1.SetAngle(&Servo1, 90U);
+            Servo1_Reset();
         }
         break;
 

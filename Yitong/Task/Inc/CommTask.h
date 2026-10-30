@@ -3,12 +3,13 @@
 
 #include "stdint.h"
 #include "port_communicate.h"
+
 #include "app_list.h"
 
 /// 版本号
 #define VERSION_MAJOR  1U
 #define VERSION_MINOR  0U
-#define VERSION_PATCH  0U
+#define VERSION_PATCH  2U
 #define VERSION_BUILD  0U
 
 #define VERSION ((VERSION_MAJOR << 24) | \
